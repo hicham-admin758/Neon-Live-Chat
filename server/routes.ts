@@ -100,5 +100,16 @@ export async function registerRoutes(
     res.json(users);
   });
 
+  app.post("/api/game/start-bomb", async (req, res) => {
+    const users = await storage.getUsers();
+    if (users.length === 0) return res.status(400).json({ message: "No players in the circle" });
+    
+    const randomIdx = Math.floor(Math.random() * users.length);
+    const selectedPlayer = users[randomIdx];
+    
+    io.emit("bomb_started", { playerId: selectedPlayer.id });
+    res.json({ success: true, playerId: selectedPlayer.id });
+  });
+
   return httpServer;
 }

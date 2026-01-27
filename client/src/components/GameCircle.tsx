@@ -1,57 +1,113 @@
 import { useUsers, useGameCircle } from "@/hooks/use-users";
-import { User } from "lucide-react";
+import { User, Bomb } from "lucide-react";
+import { useState, useEffect } from "react";
+import { io } from "socket.io-client";
 
 export function GameCircle() {
   const { data: users, isLoading } = useUsers();
   const { isConnected } = useGameCircle();
+  const [bombPlayerId, setBombPlayerId] = useState<number | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
+
+  useEffect(() => {
+    const socket = io({ path: "/socket.io" });
+    socket.on("bomb_started", (data: { playerId: number }) => {
+      setBombPlayerId(data.playerId);
+      setIsStarting(false);
+    });
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  const startBomb = async () => {
+    setIsStarting(true);
+    try {
+      await fetch("/api/game/start-bomb", { method: "POST" });
+    } catch (e) {
+      console.error("Failed to start bomb", e);
+      setIsStarting(false);
+    }
+  };
+
+  const radius = 120; // Circle radius
 
   return (
-    <section id="game-circle" className="py-16 px-8 max-w-[1400px] mx-auto">
-      <h2 className="text-center text-[2.5rem] mb-12 relative pb-4 after:content-[''] after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:w-[100px] after:h-[4px] after:bg-gradient-to-r after:from-[#8a2be2] after:to-[#00ffff] after:rounded-sm">
-        ساحة اللعب المباشرة
-        <span className="block text-sm font-normal text-cyan-400 mt-2">
-          {isConnected ? "🟢 متصل بالخادم" : "🔴 غير متصل"}
-        </span>
-      </h2>
+    <section id="game-circle" className="py-16 px-8 max-w-[1400px] mx-auto w-full">
+      <div className="flex flex-col items-center gap-8">
+        <h2 className="text-center text-[2.5rem] mb-4 relative pb-4 after:content-[''] after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:w-[100px] after:h-[4px] after:bg-gradient-to-r after:from-[#8a2be2] after:to-[#00ffff] after:rounded-sm">
+          ساحة اللعب المباشرة
+          <span className="block text-sm font-normal text-cyan-400 mt-2">
+            {isConnected ? "🟢 متصل بالخادم" : "🔴 غير متصل"}
+          </span>
+        </h2>
 
-      <div className="bg-glass-card border border-purple-500/30 rounded-[20px] p-8 min-h-[300px]">
-        {isLoading ? (
-          <div className="flex justify-center items-center h-[200px] text-[#b8b8ff]">
-            جاري تحميل اللاعبين...
-          </div>
-        ) : !users || users.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-[200px] text-[#b8b8ff] gap-4">
-            <User size={48} className="opacity-50" />
-            <p>لا يوجد لاعبين نشطين حالياً. كن أول من ينضم!</p>
-            <p className="text-sm bg-purple-900/50 px-4 py-2 rounded-lg border border-purple-500/30">
-              اكتب <span className="text-cyan-400 font-mono font-bold mx-1">!دخول</span> في شات اليوتيوب للانضمام
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
-            {users.map((user, idx) => (
-              <div 
-                key={user.id} 
-                className="flex flex-col items-center gap-3 animate-in fade-in zoom-in duration-500"
-                style={{ animationDelay: `${idx * 100}ms` }}
-              >
-                <div className="relative group cursor-pointer">
-                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-cyan-400 p-[2px] shadow-lg shadow-purple-500/20 transition-transform group-hover:scale-110">
-                    <div className="w-full h-full rounded-full bg-[#1a1f3a] flex items-center justify-center overflow-hidden">
-                      {user.avatarUrl ? (
-                        <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-2xl font-bold text-white uppercase">{user.username.slice(0, 2)}</span>
-                      )}
+        <button 
+          onClick={startBomb}
+          disabled={isStarting || !users?.length}
+          className="btn-gradient text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+        >
+          <Bomb size={20} />
+          {isStarting ? "جاري البدء..." : "ابدأ القنبلة"}
+        </button>
+
+        <div className="relative w-full max-w-[500px] aspect-square flex items-center justify-center bg-glass-card border border-purple-500/10 rounded-full">
+          {isLoading ? (
+            <div className="text-[#b8b8ff]">جاري تحميل اللاعبين...</div>
+          ) : !users || users.length === 0 ? (
+            <div className="flex flex-col items-center justify-center text-[#b8b8ff] gap-4 p-8 text-center">
+              <User size={48} className="opacity-50" />
+              <p>لا يوجد لاعبين نشطين حالياً. اكتب !دخول للانضمام!</p>
+            </div>
+          ) : (
+            <div className="relative w-full h-full">
+              {users.map((user, idx) => {
+                const angle = (idx / users.length) * 2 * Math.PI - Math.PI / 2;
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                const isHoldingBomb = bombPlayerId === user.id;
+
+                return (
+                  <div 
+                    key={user.id} 
+                    className="absolute transition-all duration-700 ease-out"
+                    style={{ 
+                      left: `calc(50% + ${x}px)`, 
+                      top: `calc(50% + ${y}px)`,
+                      transform: 'translate(-50%, -50%)'
+                    }}
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      <div className={`relative w-16 h-16 rounded-full p-[2px] transition-all duration-300 ${
+                        isHoldingBomb 
+                          ? "bg-red-500 shadow-[0_0_20px_rgba(239,68,68,0.8)] scale-125 z-20" 
+                          : "bg-gradient-to-br from-purple-500 to-cyan-400"
+                      }`}>
+                        <div className="w-full h-full rounded-full bg-[#1a1f3a] overflow-hidden flex items-center justify-center">
+                          {user.avatarUrl ? (
+                            <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-xl font-bold text-white uppercase">{user.username.slice(0, 2)}</span>
+                          )}
+                        </div>
+                        {isHoldingBomb && (
+                          <div className="absolute -top-4 -right-4 text-red-500 animate-bounce">
+                            <Bomb size={24} fill="currentColor" />
+                          </div>
+                        )}
+                      </div>
+                      <span className={`text-xs font-medium truncate max-w-[80px] px-1 py-0.5 rounded ${
+                        isHoldingBomb ? "bg-red-500 text-white" : "text-white/80"
+                      }`}>
+                        {user.username}
+                      </span>
                     </div>
                   </div>
-                  <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 border-2 border-[#1a1f3a] rounded-full"></div>
-                </div>
-                <span className="text-white font-medium text-center truncate w-full px-2">{user.username}</span>
-              </div>
-            ))}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );

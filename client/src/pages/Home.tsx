@@ -42,55 +42,14 @@ export default function Home() {
       {/* Game Circle - Live Players */}
       <GameCircle />
 
-      {/* Games Section */}
+      {/* Chat Bomb Section */}
       <section id="games" className="py-16 px-4 md:px-8 max-w-[1400px] mx-auto overflow-hidden">
         <h2 className="text-center text-[2.5rem] mb-12 relative pb-4 after:content-[''] after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:w-[100px] after:h-[4px] after:bg-gradient-to-r after:from-[#8a2be2] after:to-[#00ffff] after:rounded-sm">
-          الألعاب الأكثر شعبية
+          لعبة قنبلة الدردشة
         </h2>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-          <GameCard 
-            title="معركة الملوك" 
-            description="لعبة استراتيجية جماعية مع منافسات حماسية في الوقت الفعلي" 
-            players="12,543" 
-            icon="🎯"
-            gradient="linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-          />
-          <GameCard 
-            title="ساحة القتال" 
-            description="منافسات PvP مباشرة مع نظام تصنيف عالمي متقدم" 
-            players="8,921" 
-            icon="⚔️"
-            gradient="linear-gradient(135deg, #f093fb 0%, #f5576c 100%)"
-          />
-          <GameCard 
-            title="بطولة الأبطال" 
-            description="مسابقات يومية مع جوائز قيمة وتحديات مستمرة" 
-            players="15,678" 
-            icon="🏆"
-            gradient="linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)"
-          />
-          <GameCard 
-            title="صالة الألعاب" 
-            description="مجموعة متنوعة من الألعاب الكلاسيكية والحديثة" 
-            players="9,234" 
-            icon="🎲"
-            gradient="linear-gradient(135deg, #fa709a 0%, #fee140 100%)"
-          />
-          <GameCard 
-            title="ألغاز العقل" 
-            description="تحديات ذهنية وألغاز محيرة لتنمية مهاراتك" 
-            players="6,789" 
-            icon="🧩"
-            gradient="linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)"
-          />
-          <GameCard 
-            title="مغامرات الفضاء" 
-            description="رحلة ملحمية في عالم الفضاء الواسع" 
-            players="11,456" 
-            icon="🎮"
-            gradient="linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)"
-          />
+        <div className="flex flex-col items-center gap-12">
+          <GameCircle />
         </div>
       </section>
 
