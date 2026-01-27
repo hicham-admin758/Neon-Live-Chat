@@ -7,6 +7,7 @@ export const users = pgTable("users", {
   username: text("username").notNull(),
   avatarUrl: text("avatar_url"),
   externalId: text("external_id").unique(),
+  lobbyStatus: text("lobby_status").default("active"), // active, in_game
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
