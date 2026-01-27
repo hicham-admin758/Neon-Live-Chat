@@ -13,9 +13,25 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/users',
-      input: insertUserSchema,
+      input: insertUserSchema.extend({
+        externalId: z.string().optional(),
+      }),
       responses: {
         201: z.custom<typeof users.$inferSelect>(),
+      },
+    },
+    sync: {
+      method: 'POST' as const,
+      path: '/api/sync',
+      input: z.object({
+        url: z.string(),
+      }),
+      responses: {
+        200: z.object({
+          thumbnail: z.string(),
+          title: z.string(),
+        }),
+        400: z.object({ message: z.string() }),
       },
     },
   },

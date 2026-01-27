@@ -1,57 +1,70 @@
 import { useState, useEffect } from "react";
 import { Youtube, Link as LinkIcon, Wifi, WifiOff, Loader2 } from "lucide-react";
 import { io, Socket } from "socket.io-client";
+import { api } from "@shared/routes";
 
 export function ConnectionHeader() {
   const [url, setUrl] = useState("");
   const [status, setStatus] = useState<"connected" | "disconnected" | "connecting">("disconnected");
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const [thumbnail, setThumbnail] = useState<string | null>(null);
+  const [streamTitle, setStreamTitle] = useState<string | null>(null);
 
-  useEffect(() => {
-    const newSocket = io({
-      path: "/socket.io",
-    });
-    setSocket(newSocket);
-
-    newSocket.on("connect", () => setStatus("connected"));
-    newSocket.on("disconnect", () => setStatus("disconnected"));
-
-    return () => {
-      newSocket.disconnect();
-    };
-  }, []);
-
-  const handleSync = () => {
+  const handleSync = async () => {
     if (!url) return;
     setStatus("connecting");
-    // Simulate sync logic - in a real app, this would send the URL to the backend
-    setTimeout(() => {
-      setStatus("connected");
-      console.log("Syncing with YouTube URL:", url);
-    }, 1500);
+    try {
+      const res = await fetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setThumbnail(data.thumbnail);
+        setStreamTitle(data.title);
+        setStatus("connected");
+      } else {
+        setStatus("disconnected");
+        alert(data.message || "Sync failed");
+      }
+    } catch (e) {
+      setStatus("disconnected");
+      alert("Network error during sync");
+    }
   };
 
   return (
     <div className="fixed top-0 left-0 w-full z-[1100] px-4 py-3">
       <div className="max-w-[1000px] mx-auto bg-black/60 backdrop-blur-xl border border-purple-500/30 rounded-2xl p-3 md:p-4 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
         <div className="flex flex-col md:flex-row items-center gap-4">
-          {/* Status Badge */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 shrink-0">
-            {status === "connected" ? (
-              <>
-                <Wifi size={14} className="text-green-400" />
-                <span className="text-[0.75rem] font-bold text-green-400 uppercase tracking-wider">Connected</span>
-              </>
-            ) : status === "connecting" ? (
-              <>
-                <Loader2 size={14} className="text-yellow-400 animate-spin" />
-                <span className="text-[0.75rem] font-bold text-yellow-400 uppercase tracking-wider">Syncing</span>
-              </>
-            ) : (
-              <>
-                <WifiOff size={14} className="text-red-400" />
-                <span className="text-[0.75rem] font-bold text-red-400 uppercase tracking-wider">Disconnected</span>
-              </>
+          {/* Status & Thumbnail */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+              {status === "connected" ? (
+                <>
+                  <Wifi size={14} className="text-green-400" />
+                  <span className="text-[0.75rem] font-bold text-green-400 uppercase tracking-wider">Connected</span>
+                </>
+              ) : status === "connecting" ? (
+                <>
+                  <Loader2 size={14} className="text-yellow-400 animate-spin" />
+                  <span className="text-[0.75rem] font-bold text-yellow-400 uppercase tracking-wider">Syncing</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff size={14} className="text-red-400" />
+                  <span className="text-[0.75rem] font-bold text-red-400 uppercase tracking-wider">Disconnected</span>
+                </>
+              )}
+            </div>
+            
+            {thumbnail && (
+              <div className="h-10 w-16 rounded-lg overflow-hidden border border-white/20 relative group">
+                <img src={thumbnail} alt="Stream Thumbnail" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <Youtube size={12} className="text-white" />
+                </div>
+              </div>
             )}
           </div>
 
@@ -79,6 +92,11 @@ export function ConnectionHeader() {
             <span>Start Sync</span>
           </button>
         </div>
+        {streamTitle && status === "connected" && (
+          <div className="mt-2 text-center">
+            <span className="text-xs text-purple-300 font-medium">Live: {streamTitle}</span>
+          </div>
+        )}
       </div>
     </div>
   );

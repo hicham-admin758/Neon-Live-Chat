@@ -6,6 +6,7 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull(),
   avatarUrl: text("avatar_url"),
+  externalId: text("external_id").unique(),
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
