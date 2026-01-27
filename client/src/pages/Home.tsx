@@ -5,6 +5,7 @@ import { FeatureCard } from "@/components/FeatureCard";
 import { StatCard } from "@/components/StatCard";
 import { GameCircle } from "@/components/GameCircle";
 import { ConnectionHeader } from "@/components/ConnectionHeader";
+import { LiveLobby } from "@/components/LiveLobby";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
@@ -36,8 +37,11 @@ export default function Home() {
       <ConnectionHeader />
       <Header />
       
-      {/* Hero Section */}
-      <section id="home" className="mt-[160px] md:mt-[180px] py-16 px-8 text-center relative overflow-hidden">
+      <main className="mt-[160px] md:mt-[180px]">
+        <LiveLobby />
+        
+        {/* Hero Section */}
+        <section id="home" className="py-16 px-8 text-center relative overflow-hidden">
         <div className="absolute w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(138,43,226,0.3),transparent)] -top-[200px] -right-[200px] rounded-full animate-pulse-slow pointer-events-none"></div>
         
         <h1 className="text-[2rem] md:text-[3.5rem] mb-6 font-bold text-gradient-hero animate-gradient-shift">
