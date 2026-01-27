@@ -39,19 +39,30 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Game Circle - Live Players */}
-      <GameCircle />
-
-      {/* Chat Bomb Section */}
+      {/* Games Section */}
       <section id="games" className="py-16 px-4 md:px-8 max-w-[1400px] mx-auto overflow-hidden">
         <h2 className="text-center text-[2.5rem] mb-12 relative pb-4 after:content-[''] after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:w-[100px] after:h-[4px] after:bg-gradient-to-r after:from-[#8a2be2] after:to-[#00ffff] after:rounded-sm">
-          لعبة قنبلة الدردشة
+          الألعاب الأكثر شعبية
         </h2>
         
-        <div className="flex flex-col items-center gap-12">
-          <GameCircle />
+        <div className="flex justify-center">
+          <div className="w-full max-w-[450px]">
+            <GameCard 
+              title="قنبلة الدردشة" 
+              description="لعبة متفجرة حيث يتحكم الجمهور في الفوضى" 
+              players="8,921" 
+              icon="💣"
+              gradient="linear-gradient(135deg, #0f172a 0%, #701a75 50%, #991b1b 100%)"
+              onPlay={() => {
+                document.getElementById('game-circle')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            />
+          </div>
         </div>
       </section>
+
+      {/* Game Circle - Live Players */}
+      <GameCircle />
 
       {/* Features Section */}
       <section id="features" className="py-16 px-8 bg-black/30">

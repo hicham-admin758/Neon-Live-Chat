@@ -6,12 +6,17 @@ interface GameCardProps {
   players: string;
   icon: string;
   gradient: string;
+  onPlay?: () => void;
 }
 
-export function GameCard({ title, description, players, icon, gradient }: GameCardProps) {
+export function GameCard({ title, description, players, icon, gradient, onPlay }: GameCardProps) {
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    alert(`جاري تحميل لعبة: ${title}...`);
+    if (onPlay) {
+      onPlay();
+    } else {
+      alert(`جاري تحميل لعبة: ${title}...`);
+    }
   };
 
   const handleCardClick = () => {
