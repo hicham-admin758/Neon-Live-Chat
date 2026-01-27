@@ -41,12 +41,12 @@ export default function Home() {
       <GameCircle />
 
       {/* Games Section */}
-      <section id="games" className="py-16 px-8 max-w-[1400px] mx-auto">
+      <section id="games" className="py-16 px-4 md:px-8 max-w-[1400px] mx-auto overflow-hidden">
         <h2 className="text-center text-[2.5rem] mb-12 relative pb-4 after:content-[''] after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:w-[100px] after:h-[4px] after:bg-gradient-to-r after:from-[#8a2be2] after:to-[#00ffff] after:rounded-sm">
           الألعاب الأكثر شعبية
         </h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
           <GameCard 
             title="معركة الملوك" 
             description="لعبة استراتيجية جماعية مع منافسات حماسية في الوقت الفعلي" 

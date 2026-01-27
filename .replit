@@ -37,3 +37,8 @@ author = "agent"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[userenv]
+
+[userenv.shared]
+YOUTUBE_API_KEY = "AIzaSyD7pOSOZk9Q3iWbWFmUN-JyCFlP876sZrA"
