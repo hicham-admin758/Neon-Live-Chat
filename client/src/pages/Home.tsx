@@ -5,8 +5,32 @@ import { FeatureCard } from "@/components/FeatureCard";
 import { StatCard } from "@/components/StatCard";
 import { GameCircle } from "@/components/GameCircle";
 import { ConnectionHeader } from "@/components/ConnectionHeader";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
 
 export default function Home() {
+  const [activeGame, setActiveGame] = useState<string | null>(null);
+
+  if (activeGame === "chat-bomb") {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center p-4 relative" dir="rtl">
+        <Button 
+          variant="ghost" 
+          className="absolute top-8 right-8 text-white/70 hover:text-white"
+          onClick={() => setActiveGame(null)}
+          data-testid="button-back-to-lobby"
+        >
+          <ArrowLeft className="ml-2" />
+          العودة للرئيسية
+        </Button>
+        <div className="w-full max-w-4xl">
+          <GameCircle />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col" dir="rtl">
       <ConnectionHeader />
@@ -53,16 +77,11 @@ export default function Home() {
               players="8,921" 
               icon="💣"
               gradient="linear-gradient(135deg, #0f172a 0%, #701a75 50%, #991b1b 100%)"
-              onPlay={() => {
-                document.getElementById('game-circle')?.scrollIntoView({ behavior: 'smooth' });
-              }}
+              onPlay={() => setActiveGame("chat-bomb")}
             />
           </div>
         </div>
       </section>
-
-      {/* Game Circle - Live Players */}
-      <GameCircle />
 
       {/* Features Section */}
       <section id="features" className="py-16 px-8 bg-black/30">
