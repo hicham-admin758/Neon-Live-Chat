@@ -4,14 +4,16 @@ import { GameCard } from "@/components/GameCard";
 import { FeatureCard } from "@/components/FeatureCard";
 import { StatCard } from "@/components/StatCard";
 import { GameCircle } from "@/components/GameCircle";
+import { ConnectionHeader } from "@/components/ConnectionHeader";
 
 export default function Home() {
   return (
     <div className="min-h-screen flex flex-col" dir="rtl">
+      <ConnectionHeader />
       <Header />
       
       {/* Hero Section */}
-      <section id="home" className="mt-[100px] py-16 px-8 text-center relative overflow-hidden">
+      <section id="home" className="mt-[160px] md:mt-[180px] py-16 px-8 text-center relative overflow-hidden">
         <div className="absolute w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(138,43,226,0.3),transparent)] -top-[200px] -right-[200px] rounded-full animate-pulse-slow pointer-events-none"></div>
         
         <h1 className="text-[2rem] md:text-[3.5rem] mb-6 font-bold text-gradient-hero animate-gradient-shift">
