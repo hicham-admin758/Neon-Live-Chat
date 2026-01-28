@@ -1,5 +1,5 @@
 import { useUsers, useGameCircle } from "@/hooks/use-users";
-import { Bomb } from "lucide-react";
+import { Bomb, User as UserIcon } from "lucide-react";
 import { useState, useEffect } from "react";
 import { io } from "socket.io-client";
 import { queryClient } from "@/lib/queryClient";
@@ -139,7 +139,7 @@ export function GameCircle() {
             <div className="text-[#b8b8ff]">جاري تحميل اللاعبين...</div>
           ) : !users || users.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-[#b8b8ff] gap-4 p-8 text-center">
-              <User size={48} className="opacity-50" />
+              <UserIcon size={48} className="opacity-50" />
               <p>لا يوجد لاعبين نشطين حالياً. اكتب !دخول للانضمام!</p>
             </div>
           ) : (
