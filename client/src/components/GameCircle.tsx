@@ -8,12 +8,24 @@ export function GameCircle() {
   const { isConnected } = useGameCircle();
   const [bombPlayerId, setBombPlayerId] = useState<number | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (timeLeft !== null && timeLeft > 0) {
+      timer = setInterval(() => {
+        setTimeLeft(prev => (prev !== null && prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [timeLeft]);
 
   useEffect(() => {
     const socket = io({ path: "/socket.io" });
     socket.on("bomb_started", (data: { playerId: number }) => {
       setBombPlayerId(data.playerId);
       setIsStarting(false);
+      setTimeLeft(30);
     });
     return () => {
       socket.disconnect();
@@ -52,6 +64,16 @@ export function GameCircle() {
         </button>
 
         <div className="relative w-full max-w-[500px] aspect-square flex items-center justify-center bg-glass-card border border-purple-500/10 rounded-full">
+          {timeLeft !== null && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center">
+              <div className="text-6xl font-black text-white drop-shadow-[0_0_15px_rgba(0,255,255,0.5)] animate-pulse">
+                {timeLeft}
+              </div>
+              <div className="text-cyan-400 font-bold tracking-widest text-sm uppercase mt-2">
+                ثانية
+              </div>
+            </div>
+          )}
           {isLoading ? (
             <div className="text-[#b8b8ff]">جاري تحميل اللاعبين...</div>
           ) : !users || users.length === 0 ? (
