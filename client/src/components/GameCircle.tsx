@@ -11,6 +11,15 @@ export function GameCircle() {
   const [bombPlayerId, setBombPlayerId] = useState<number | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [winner, setWinner] = useState<User | null>(null);
+
+  useEffect(() => {
+    if (users && users.length === 1 && bombPlayerId === null && timeLeft === null) {
+      setWinner(users[0]);
+    } else {
+      setWinner(null);
+    }
+  }, [users, bombPlayerId, timeLeft]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -79,6 +88,25 @@ export function GameCircle() {
         </button>
 
         <div className="relative w-full max-w-[500px] aspect-square flex items-center justify-center bg-glass-card border border-purple-500/10 rounded-full">
+          {winner && (
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md rounded-full animate-in fade-in zoom-in duration-500">
+              <div className="text-yellow-400 animate-bounce mb-4">
+                <Bomb size={64} fill="currentColor" className="rotate-12" />
+              </div>
+              <h3 className="text-4xl font-black text-white mb-2 text-center px-4">
+                مبروك الفوز!
+              </h3>
+              <div className="text-2xl font-bold text-cyan-400 mb-6 uppercase tracking-widest">
+                {winner.username}
+              </div>
+              <button 
+                onClick={() => setWinner(null)}
+                className="btn-gradient text-white px-8 py-2 rounded-full font-bold text-sm"
+              >
+                إغلاق
+              </button>
+            </div>
+          )}
           {timeLeft !== null && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center">
               <div className="text-6xl font-black text-white drop-shadow-[0_0_15px_rgba(0,255,255,0.5)] animate-pulse">
