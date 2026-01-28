@@ -55,13 +55,13 @@ export function ConnectionHeader() {
       setStatus("connected");
       
       if (!res.ok && res.status !== 404) {
-        alert(data.message || "Sync error, but forcing connection");
+        console.warn(data.message || "Sync error, but forcing connection");
       }
     } catch (e) {
       // Force status to connected even on catch if the user wants bypass
       setStatus("connected");
       setStreamTitle("تم الاتصال (وضع القوة)");
-      alert("حدث خطأ في التحقق، تم تفعيل الاتصال القسري");
+      console.error("حدث خطأ في التحقق، تم تفعيل الاتصال القسري");
     }
   };
 

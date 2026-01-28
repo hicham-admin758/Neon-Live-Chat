@@ -32,8 +32,11 @@ export async function registerRoutes(
   async function pollChat() {
     if (!activeLiveChatId || !YT_API_KEY) return;
     try {
-      const url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${activeLiveChatId}&part=snippet,authorDetails&key=${YT_API_KEY}`;
+      const url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${activeLiveChatId}&part=snippet,authorDetails&maxResults=200&key=${YT_API_KEY}`;
       const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`YouTube API error: ${res.status}`);
+      }
       const data = await res.json();
       const messages = data.items || [];
 
@@ -43,7 +46,9 @@ export async function registerRoutes(
 
         if (lastMessageTime && publishTime <= lastMessageTime) continue;
         
-        if (text.trim() === "!دخول") {
+        const cleanText = text.trim();
+        
+        if (cleanText === "!دخول") {
           const author = msg.authorDetails;
           const username = author.displayName;
           const avatarUrl = author.profileImageUrl;
@@ -54,19 +59,25 @@ export async function registerRoutes(
             const user = await storage.createUser({
               username,
               avatarUrl,
-              externalId
+              externalId,
+              lobbyStatus: "active"
             });
             io.emit("new_player", user);
+          } else if (existing.lobbyStatus !== "active") {
+            await storage.updateUserStatus(existing.id, "active");
+            io.emit("new_player", { ...existing, lobbyStatus: "active" });
           }
         }
 
         // Bomb transfer logic
         if (currentBombHolderId) {
           const author = msg.authorDetails;
+          // Check by both username and potentially externalId if we stored it
           const sender = await storage.getUserByUsername(author.displayName);
           
           if (sender && sender.id === currentBombHolderId) {
-            const targetId = parseInt(text.trim());
+            // Match exactly just the number
+            const targetId = parseInt(cleanText);
             if (!isNaN(targetId) && targetId !== currentBombHolderId) {
               const targetUser = await storage.getUser(targetId);
               if (targetUser && targetUser.lobbyStatus === "active") {
@@ -79,7 +90,7 @@ export async function registerRoutes(
         lastMessageTime = publishTime;
       }
     } catch (e) {
-      console.error("Chat polling error:", e);
+      console.error("Chat polling error (retrying in next interval):", e);
     }
   }
 
