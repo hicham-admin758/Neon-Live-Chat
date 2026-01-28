@@ -14,22 +14,12 @@ export default function Home() {
   const [activeGame, setActiveGame] = useState<string | null>(null);
 
   if (activeGame === "chat-bomb") {
-    const handleExit = async () => {
-      try {
-        await fetch("/api/game/clear-participants", { method: "POST" });
-        setActiveGame(null);
-      } catch (e) {
-        console.error("Failed to clear participants", e);
-        setActiveGame(null);
-      }
-    };
-
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center p-4 relative" dir="rtl">
         <Button 
           variant="ghost" 
           className="absolute top-8 right-8 text-white/70 hover:text-white"
-          onClick={handleExit}
+          onClick={() => setActiveGame(null)}
           data-testid="button-back-to-lobby"
         >
           <ArrowLeft className="ml-2" />

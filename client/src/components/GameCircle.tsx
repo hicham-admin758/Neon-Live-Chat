@@ -127,6 +127,14 @@ export function GameCircle() {
     }
   };
 
+  const resetGame = async () => {
+    try {
+      await fetch("/api/game/clear-participants", { method: "POST" });
+    } catch (e) {
+      console.error("Failed to clear participants", e);
+    }
+  };
+
   const radius = 140; // Increased circle radius for larger avatars
 
   return (
@@ -139,14 +147,23 @@ export function GameCircle() {
           </span>
         </h2>
 
-        <button 
-          onClick={startBomb}
-          disabled={isStarting || !users?.length}
-          className="btn-gradient text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
-        >
-          <Bomb size={20} />
-          {isStarting ? "جاري البدء..." : "ابدأ القنبلة"}
-        </button>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={startBomb}
+            disabled={isStarting || !users?.length}
+            className="btn-gradient text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+          >
+            <Bomb size={20} />
+            {isStarting ? "جاري البدء..." : "ابدأ القنبلة"}
+          </button>
+          
+          <button 
+            onClick={resetGame}
+            className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-full font-bold transition-all"
+          >
+            تصفير اللاعبين
+          </button>
+        </div>
 
         <div className="relative w-full max-w-[600px] aspect-square flex items-center justify-center bg-glass-card border border-purple-500/10 rounded-full">
           {winner && (

@@ -13,8 +13,28 @@ export function ConnectionHeader() {
     const savedUrl = localStorage.getItem("stream_url");
     if (savedUrl) {
       setUrl(savedUrl);
-      // We don't call handleSync automatically to avoid errors on page load
-      // but we could if we wanted immediate sync. For now, just set the URL.
+      // Auto-reconnect on refresh
+      const reconnect = async () => {
+        setStatus("connecting");
+        try {
+          const res = await fetch("/api/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: savedUrl }),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            setThumbnail(data.thumbnail);
+            setStreamTitle(data.title);
+            setStatus("connected");
+          } else {
+            setStatus("disconnected");
+          }
+        } catch (e) {
+          setStatus("disconnected");
+        }
+      };
+      reconnect();
     }
   }, []);
 
