@@ -20,6 +20,7 @@ export function GameCircle() {
   const [isStarting, setIsStarting] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [winner, setWinner] = useState<User | null>(null);
+  const [explodingId, setExplodingId] = useState<number | null>(null);
   
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({});
 
@@ -73,6 +74,11 @@ export function GameCircle() {
       }, 1000);
     } else if (timeLeft === 0 && bombPlayerId) {
       playSound("explosion");
+      setExplodingId(bombPlayerId);
+      
+      // Screen shake effect handled via state/className on main container
+      setTimeout(() => setExplodingId(null), 1000);
+
       // Trigger elimination
       fetch("/api/game/eliminate", {
         method: "POST",
@@ -121,10 +127,10 @@ export function GameCircle() {
     }
   };
 
-  const radius = 120; // Circle radius
+  const radius = 140; // Increased circle radius for larger avatars
 
   return (
-    <section id="game-circle" className="py-16 px-8 max-w-[1400px] mx-auto w-full">
+    <section id="game-circle" className={`py-16 px-8 max-w-[1400px] mx-auto w-full transition-transform duration-100 ${explodingId ? 'animate-shake' : ''}`}>
       <div className="flex flex-col items-center gap-8">
         <h2 className="text-center text-[2.5rem] mb-4 relative pb-4 after:content-[''] after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:w-[100px] after:h-[4px] after:bg-gradient-to-r after:from-[#8a2be2] after:to-[#00ffff] after:rounded-sm">
           ساحة اللعب المباشرة
@@ -142,7 +148,7 @@ export function GameCircle() {
           {isStarting ? "جاري البدء..." : "ابدأ القنبلة"}
         </button>
 
-        <div className="relative w-full max-w-[500px] aspect-square flex items-center justify-center bg-glass-card border border-purple-500/10 rounded-full">
+        <div className="relative w-full max-w-[600px] aspect-square flex items-center justify-center bg-glass-card border border-purple-500/10 rounded-full">
           {winner && (
             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md rounded-full animate-in fade-in zoom-in duration-500">
               <div className="text-yellow-400 animate-bounce mb-4">
@@ -197,34 +203,41 @@ export function GameCircle() {
                       transform: 'translate(-50%, -50%)'
                     }}
                   >
-                    <div className="flex flex-col items-center gap-2">
+                    <div className="flex flex-col items-center gap-3">
                       <div className="relative group">
-                        {/* ID Number Badge */}
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-cyan-500 text-black text-xs font-bold px-2 py-0.5 rounded-full border border-white shadow-[0_0_10px_rgba(0,255,255,0.5)] z-30">
+                        {/* ID Number Badge - MUCH LARGER and HIGH CONTRAST */}
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-cyan-400 text-black text-lg font-black px-4 py-1 rounded-full border-2 border-white shadow-[0_0_20px_rgba(0,255,255,0.8)] z-30 min-w-[50px] text-center">
                           #{user.id}
                         </div>
                         
-                        <div className={`relative w-16 h-16 rounded-full p-[2px] transition-all duration-300 ${
+                        <div className={`relative w-24 h-24 rounded-full p-[3px] transition-all duration-300 ${
                           isHoldingBomb 
-                            ? "bg-red-500 shadow-[0_0_20px_rgba(239,68,68,0.8)] scale-125 z-20" 
-                            : "bg-gradient-to-br from-purple-500 to-cyan-400"
+                            ? "bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.9)] scale-110 z-20" 
+                            : "bg-gradient-to-br from-purple-500 to-cyan-400 shadow-[0_0_15px_rgba(138,43,226,0.3)]"
                         }`}>
-                          <div className="w-full h-full rounded-full bg-[#1a1f3a] overflow-hidden flex items-center justify-center">
+                          <div className="w-full h-full rounded-full bg-[#1a1f3a] overflow-hidden flex items-center justify-center relative">
                             {user.avatarUrl ? (
                               <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
                             ) : (
-                              <span className="text-xl font-bold text-white uppercase">{user.username.slice(0, 2)}</span>
+                              <span className="text-2xl font-black text-white uppercase">{user.username.slice(0, 2)}</span>
+                            )}
+
+                            {/* Explosion Overlay */}
+                            {explodingId === user.id && (
+                              <div className="absolute inset-0 bg-orange-500 animate-ping z-50 flex items-center justify-center">
+                                <div className="absolute inset-0 bg-yellow-400 animate-pulse opacity-80" />
+                              </div>
                             )}
                           </div>
                           {isHoldingBomb && (
-                            <div className="absolute -top-4 -right-4 text-red-500 animate-bounce">
-                              <Bomb size={24} fill="currentColor" />
+                            <div className="absolute -top-6 -right-6 text-red-500 animate-bounce drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">
+                              <Bomb size={36} fill="currentColor" />
                             </div>
                           )}
                         </div>
                       </div>
-                      <span className={`text-xs font-medium truncate max-w-[80px] px-1 py-0.5 rounded ${
-                        isHoldingBomb ? "bg-red-500 text-white" : "text-white/80"
+                      <span className={`text-sm font-bold truncate max-w-[100px] px-2 py-1 rounded-lg ${
+                        isHoldingBomb ? "bg-red-500 text-white shadow-lg scale-110" : "text-white/90 bg-black/20"
                       }`}>
                         {user.username}
                       </span>
