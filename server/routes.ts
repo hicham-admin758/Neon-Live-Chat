@@ -20,6 +20,7 @@ export async function registerRoutes(
   let activeLiveChatId: string | null = null;
   let pollingInterval: NodeJS.Timeout | null = null;
   let lastMessageTime: string | null = null;
+  let currentBombHolderId: number | null = null;
 
   async function getLiveChatId(videoId: string) {
     const url = `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}&key=${YT_API_KEY}`;
@@ -56,6 +57,23 @@ export async function registerRoutes(
               externalId
             });
             io.emit("new_player", user);
+          }
+        }
+
+        // Bomb transfer logic
+        if (currentBombHolderId) {
+          const author = msg.authorDetails;
+          const sender = await storage.getUserByUsername(author.displayName);
+          
+          if (sender && sender.id === currentBombHolderId) {
+            const targetId = parseInt(text.trim().replace("#", ""));
+            if (!isNaN(targetId) && targetId !== currentBombHolderId) {
+              const targetUser = await storage.getUser(targetId);
+              if (targetUser) {
+                currentBombHolderId = targetId;
+                io.emit("bomb_started", { playerId: targetId });
+              }
+            }
           }
         }
         lastMessageTime = publishTime;
@@ -107,6 +125,7 @@ export async function registerRoutes(
     const randomIdx = Math.floor(Math.random() * users.length);
     const selectedPlayer = users[randomIdx];
     
+    currentBombHolderId = selectedPlayer.id;
     io.emit("bomb_started", { playerId: selectedPlayer.id });
     res.json({ success: true, playerId: selectedPlayer.id });
   });
