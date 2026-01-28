@@ -89,18 +89,19 @@ export function GameCircle() {
                             ? "bg-red-500 shadow-[0_0_20px_rgba(239,68,68,0.8)] scale-125 z-20" 
                             : "bg-gradient-to-br from-purple-500 to-cyan-400"
                         }`}>
-                        <div className="w-full h-full rounded-full bg-[#1a1f3a] overflow-hidden flex items-center justify-center">
-                          {user.avatarUrl ? (
-                            <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-xl font-bold text-white uppercase">{user.username.slice(0, 2)}</span>
+                          <div className="w-full h-full rounded-full bg-[#1a1f3a] overflow-hidden flex items-center justify-center">
+                            {user.avatarUrl ? (
+                              <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-xl font-bold text-white uppercase">{user.username.slice(0, 2)}</span>
+                            )}
+                          </div>
+                          {isHoldingBomb && (
+                            <div className="absolute -top-4 -right-4 text-red-500 animate-bounce">
+                              <Bomb size={24} fill="currentColor" />
+                            </div>
                           )}
                         </div>
-                        {isHoldingBomb && (
-                          <div className="absolute -top-4 -right-4 text-red-500 animate-bounce">
-                            <Bomb size={24} fill="currentColor" />
-                          </div>
-                        )}
                       </div>
                       <span className={`text-xs font-medium truncate max-w-[80px] px-1 py-0.5 rounded ${
                         isHoldingBomb ? "bg-red-500 text-white" : "text-white/80"
