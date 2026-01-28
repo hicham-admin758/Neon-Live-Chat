@@ -35,7 +35,9 @@ export async function registerRoutes(
       const url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${activeLiveChatId}&part=snippet,authorDetails&maxResults=200&key=${YT_API_KEY}`;
       const res = await fetch(url);
       if (!res.ok) {
-        throw new Error(`YouTube API error: ${res.status}`);
+        // Log but don't crash
+        console.error(`YouTube API error: ${res.status}`);
+        return;
       }
       const data = await res.json();
       const messages = data.items || [];
@@ -69,20 +71,24 @@ export async function registerRoutes(
           }
         }
 
-        // Bomb transfer logic
+        // Bomb transfer logic - SMART LISTENER
         if (currentBombHolderId) {
           const author = msg.authorDetails;
-          // Check by both username and potentially externalId if we stored it
-          const sender = await storage.getUserByUsername(author.displayName);
+          const senderName = author.displayName;
+          
+          // Use storage to find sender by username
+          const sender = await storage.getUserByUsername(senderName);
           
           if (sender && sender.id === currentBombHolderId) {
-            // Match exactly just the number
+            // Check if text is JUST a number
             const targetId = parseInt(cleanText);
-            if (!isNaN(targetId) && targetId !== currentBombHolderId) {
+            // Validation: Must be a number, not the holder, and exists in DB as active
+            if (!isNaN(targetId) && targetId !== currentBombHolderId && /^\d+$/.test(cleanText)) {
               const targetUser = await storage.getUser(targetId);
               if (targetUser && targetUser.lobbyStatus === "active") {
                 currentBombHolderId = targetId;
                 io.emit("bomb_started", { playerId: targetId });
+                console.log(`Bomb transferred from ${sender.id} to ${targetId}`);
               }
             }
           }
@@ -90,7 +96,7 @@ export async function registerRoutes(
         lastMessageTime = publishTime;
       }
     } catch (e) {
-      console.error("Chat polling error (retrying in next interval):", e);
+      console.error("Chat polling error (retrying):", e);
     }
   }
 
