@@ -1,9 +1,10 @@
 import { useUsers, useGameCircle } from "@/hooks/use-users";
-import { User, Bomb } from "lucide-react";
+import { Bomb } from "lucide-react";
 import { useState, useEffect } from "react";
 import { io } from "socket.io-client";
 import { queryClient } from "@/lib/queryClient";
 import { api } from "@shared/routes";
+import { type User } from "@shared/schema";
 
 export function GameCircle() {
   const { data: users, isLoading } = useUsers();
@@ -16,6 +17,17 @@ export function GameCircle() {
   useEffect(() => {
     if (users && users.length === 1 && bombPlayerId === null && timeLeft === null) {
       setWinner(users[0]);
+      
+      // Auto-reset after 5 seconds
+      const timeout = setTimeout(async () => {
+        try {
+          await fetch("/api/game/reset", { method: "POST" });
+        } catch (e) {
+          console.error("Failed to reset game", e);
+        }
+      }, 5000);
+      
+      return () => clearTimeout(timeout);
     } else {
       setWinner(null);
     }
@@ -49,6 +61,12 @@ export function GameCircle() {
     });
     socket.on("player_eliminated", () => {
       // Refresh users list via react-query
+      queryClient.invalidateQueries({ queryKey: [api.users.list.path] });
+    });
+    socket.on("game_reset", () => {
+      setBombPlayerId(null);
+      setTimeLeft(null);
+      setWinner(null);
       queryClient.invalidateQueries({ queryKey: [api.users.list.path] });
     });
     return () => {

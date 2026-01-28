@@ -141,5 +141,12 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  app.post("/api/game/reset", async (req, res) => {
+    await storage.resetAllUsersStatus();
+    currentBombHolderId = null;
+    io.emit("game_reset");
+    res.json({ success: true });
+  });
+
   return httpServer;
 }

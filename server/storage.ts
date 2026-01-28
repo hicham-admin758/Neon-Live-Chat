@@ -8,6 +8,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   getUsers(): Promise<User[]>;
   updateUserStatus(id: number, status: string): Promise<User | undefined>;
+  resetAllUsersStatus(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -33,6 +34,10 @@ export class DatabaseStorage implements IStorage {
   async updateUserStatus(id: number, status: string): Promise<User | undefined> {
     const [user] = await db.update(users).set({ lobbyStatus: status }).where(eq(users.id, id)).returning();
     return user;
+  }
+
+  async resetAllUsersStatus(): Promise<void> {
+    await db.update(users).set({ lobbyStatus: "active" });
   }
 }
 
