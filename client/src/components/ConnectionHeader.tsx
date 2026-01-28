@@ -49,17 +49,19 @@ export function ConnectionHeader() {
         body: JSON.stringify({ url }),
       });
       const data = await res.json();
-      if (res.ok) {
-        setThumbnail(data.thumbnail);
-        setStreamTitle(data.title);
-        setStatus("connected");
-      } else {
-        setStatus("disconnected");
-        alert(data.message || "Sync failed");
+      // Force connection even if metadata fails as long as we get a response
+      setThumbnail(data.thumbnail);
+      setStreamTitle(data.title);
+      setStatus("connected");
+      
+      if (!res.ok && res.status !== 404) {
+        alert(data.message || "Sync error, but forcing connection");
       }
     } catch (e) {
-      setStatus("disconnected");
-      alert("Network error during sync");
+      // Force status to connected even on catch if the user wants bypass
+      setStatus("connected");
+      setStreamTitle("تم الاتصال (وضع القوة)");
+      alert("حدث خطأ في التحقق، تم تفعيل الاتصال القسري");
     }
   };
 
