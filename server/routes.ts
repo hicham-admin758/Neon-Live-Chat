@@ -66,10 +66,10 @@ export async function registerRoutes(
           const sender = await storage.getUserByUsername(author.displayName);
           
           if (sender && sender.id === currentBombHolderId) {
-            const targetId = parseInt(text.trim().replace("#", ""));
+            const targetId = parseInt(text.trim());
             if (!isNaN(targetId) && targetId !== currentBombHolderId) {
               const targetUser = await storage.getUser(targetId);
-              if (targetUser) {
+              if (targetUser && targetUser.lobbyStatus === "active") {
                 currentBombHolderId = targetId;
                 io.emit("bomb_started", { playerId: targetId });
               }
