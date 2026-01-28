@@ -16,7 +16,10 @@ export function LiveLobby() {
             {isLoading ? (
               <p className="text-white/50">جاري التحميل...</p>
             ) : users?.map((user) => (
-              <div key={user.id} className="flex items-center gap-2 bg-glass-card border border-purple-500/30 px-3 py-1.5 rounded-full">
+              <div key={user.id} className="flex items-center gap-2 bg-glass-card border border-purple-500/30 px-3 py-1.5 rounded-full relative group">
+                <div className="absolute -top-2 -left-1 bg-cyan-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-white z-10">
+                  #{user.id}
+                </div>
                 <div className="w-8 h-8 rounded-full overflow-hidden border border-cyan-400/50">
                   <img src={user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.username}`} alt={user.username} className="w-full h-full object-cover" />
                 </div>

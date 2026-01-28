@@ -78,11 +78,17 @@ export function GameCircle() {
                     }}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <div className={`relative w-16 h-16 rounded-full p-[2px] transition-all duration-300 ${
-                        isHoldingBomb 
-                          ? "bg-red-500 shadow-[0_0_20px_rgba(239,68,68,0.8)] scale-125 z-20" 
-                          : "bg-gradient-to-br from-purple-500 to-cyan-400"
-                      }`}>
+                      <div className="relative group">
+                        {/* ID Number Badge */}
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-cyan-500 text-black text-xs font-bold px-2 py-0.5 rounded-full border border-white shadow-[0_0_10px_rgba(0,255,255,0.5)] z-30">
+                          #{user.id}
+                        </div>
+                        
+                        <div className={`relative w-16 h-16 rounded-full p-[2px] transition-all duration-300 ${
+                          isHoldingBomb 
+                            ? "bg-red-500 shadow-[0_0_20px_rgba(239,68,68,0.8)] scale-125 z-20" 
+                            : "bg-gradient-to-br from-purple-500 to-cyan-400"
+                        }`}>
                         <div className="w-full h-full rounded-full bg-[#1a1f3a] overflow-hidden flex items-center justify-center">
                           {user.avatarUrl ? (
                             <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
