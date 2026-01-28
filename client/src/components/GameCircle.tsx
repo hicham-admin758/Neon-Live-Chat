@@ -1,10 +1,17 @@
 import { useUsers, useGameCircle } from "@/hooks/use-users";
 import { Bomb, User as UserIcon } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import { queryClient } from "@/lib/queryClient";
 import { api } from "@shared/routes";
 import { type User } from "@shared/schema";
+
+const SOUNDS = {
+  tick: "https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3",
+  explosion: "https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3",
+  pass: "https://assets.mixkit.co/active_storage/sfx/2572/2572-preview.mp3",
+  victory: "https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3"
+};
 
 export function GameCircle() {
   const { data: users, isLoading } = useUsers();
@@ -13,10 +20,31 @@ export function GameCircle() {
   const [isStarting, setIsStarting] = useState(false);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [winner, setWinner] = useState<User | null>(null);
+  
+  const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({});
+
+  useEffect(() => {
+    // Preload sounds
+    Object.entries(SOUNDS).forEach(([key, url]) => {
+      const audio = new Audio(url);
+      audio.load();
+      audioRefs.current[key] = audio;
+    });
+  }, []);
+
+  const playSound = (key: keyof typeof SOUNDS, playbackRate = 1) => {
+    const audio = audioRefs.current[key];
+    if (audio) {
+      audio.currentTime = 0;
+      audio.playbackRate = playbackRate;
+      audio.play().catch(() => {}); // Ignore autoplay errors
+    }
+  };
 
   useEffect(() => {
     if (users && users.length === 1 && bombPlayerId === null && timeLeft === null) {
       setWinner(users[0]);
+      playSound("victory");
       
       // Auto-reset after 5 seconds
       const timeout = setTimeout(async () => {
@@ -36,10 +64,15 @@ export function GameCircle() {
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (timeLeft !== null && timeLeft > 0) {
+      // Play tick sound with increasing speed
+      const speed = 1 + (30 - timeLeft) / 15; // Faster as time runs out
+      playSound("tick", speed);
+
       timer = setInterval(() => {
         setTimeLeft(prev => (prev !== null && prev > 0 ? prev - 1 : 0));
       }, 1000);
     } else if (timeLeft === 0 && bombPlayerId) {
+      playSound("explosion");
       // Trigger elimination
       fetch("/api/game/eliminate", {
         method: "POST",
@@ -55,6 +88,10 @@ export function GameCircle() {
   useEffect(() => {
     const socket = io({ path: "/socket.io" });
     socket.on("bomb_started", (data: { playerId: number }) => {
+      const isNewRound = timeLeft === null;
+      if (!isNewRound) {
+        playSound("pass");
+      }
       setBombPlayerId(data.playerId);
       setIsStarting(false);
       setTimeLeft(30);
@@ -72,7 +109,7 @@ export function GameCircle() {
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, [timeLeft]);
 
   const startBomb = async () => {
     setIsStarting(true);
