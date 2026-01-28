@@ -9,6 +9,7 @@ export interface IStorage {
   getUsers(): Promise<User[]>;
   updateUserStatus(id: number, status: string): Promise<User | undefined>;
   resetAllUsersStatus(): Promise<void>;
+  deleteAllUsers(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -38,6 +39,10 @@ export class DatabaseStorage implements IStorage {
 
   async resetAllUsersStatus(): Promise<void> {
     await db.update(users).set({ lobbyStatus: "active" });
+  }
+
+  async deleteAllUsers(): Promise<void> {
+    await db.delete(users);
   }
 }
 

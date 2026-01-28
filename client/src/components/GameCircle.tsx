@@ -170,10 +170,10 @@ export function GameCircle() {
           )}
           {timeLeft !== null && (
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center">
-              <div className="text-6xl font-black text-white drop-shadow-[0_0_15px_rgba(0,255,255,0.5)] animate-pulse">
+              <div className="text-8xl font-black text-white drop-shadow-[0_0_25px_rgba(0,255,255,0.7)] animate-pulse">
                 {timeLeft}
               </div>
-              <div className="text-cyan-400 font-bold tracking-widest text-sm uppercase mt-2">
+              <div className="text-cyan-400 font-black tracking-[0.2em] text-xl uppercase mt-4">
                 ثانية
               </div>
             </div>
@@ -206,20 +206,20 @@ export function GameCircle() {
                     <div className="flex flex-col items-center gap-3">
                       <div className="relative group">
                         {/* ID Number Badge - MUCH LARGER and HIGH CONTRAST */}
-                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-cyan-400 text-black text-lg font-black px-4 py-1 rounded-full border-2 border-white shadow-[0_0_20px_rgba(0,255,255,0.8)] z-30 min-w-[50px] text-center">
+                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-cyan-400 text-black text-xl font-black px-5 py-1.5 rounded-full border-2 border-white shadow-[0_0_25px_rgba(0,255,255,0.9)] z-[60] min-w-[60px] text-center pointer-events-none">
                           #{user.id}
                         </div>
                         
-                        <div className={`relative w-24 h-24 rounded-full p-[3px] transition-all duration-300 ${
+                        <div className={`relative w-28 h-28 rounded-full p-[4px] transition-all duration-300 ${
                           isHoldingBomb 
-                            ? "bg-red-500 shadow-[0_0_30px_rgba(239,68,68,0.9)] scale-110 z-20" 
-                            : "bg-gradient-to-br from-purple-500 to-cyan-400 shadow-[0_0_15px_rgba(138,43,226,0.3)]"
+                            ? "bg-red-500 shadow-[0_0_40px_rgba(239,68,68,1)] scale-110 z-20" 
+                            : "bg-gradient-to-br from-purple-500 to-cyan-400 shadow-[0_0_20px_rgba(138,43,226,0.4)]"
                         }`}>
                           <div className="w-full h-full rounded-full bg-[#1a1f3a] overflow-hidden flex items-center justify-center relative">
                             {user.avatarUrl ? (
                               <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
                             ) : (
-                              <span className="text-2xl font-black text-white uppercase">{user.username.slice(0, 2)}</span>
+                              <span className="text-3xl font-black text-white uppercase">{user?.username?.slice(0, 2) || "??"}</span>
                             )}
 
                             {/* Explosion Overlay */}
@@ -230,14 +230,14 @@ export function GameCircle() {
                             )}
                           </div>
                           {isHoldingBomb && (
-                            <div className="absolute -top-6 -right-6 text-red-500 animate-bounce drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">
-                              <Bomb size={36} fill="currentColor" />
+                            <div className="absolute -top-8 -right-8 text-red-500 animate-bounce drop-shadow-[0_0_15px_rgba(239,68,68,0.9)] z-50">
+                              <Bomb size={42} fill="currentColor" />
                             </div>
                           )}
                         </div>
                       </div>
-                      <span className={`text-sm font-bold truncate max-w-[100px] px-2 py-1 rounded-lg ${
-                        isHoldingBomb ? "bg-red-500 text-white shadow-lg scale-110" : "text-white/90 bg-black/20"
+                      <span className={`text-base font-bold truncate max-w-[120px] px-3 py-1.5 rounded-xl ${
+                        isHoldingBomb ? "bg-red-500 text-white shadow-xl scale-110" : "text-white/90 bg-black/40 backdrop-blur-sm"
                       }`}>
                         {user.username}
                       </span>

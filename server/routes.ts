@@ -148,5 +148,12 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  app.post("/api/game/clear-participants", async (req, res) => {
+    await storage.deleteAllUsers();
+    currentBombHolderId = null;
+    io.emit("game_reset");
+    res.json({ success: true });
+  });
+
   return httpServer;
 }

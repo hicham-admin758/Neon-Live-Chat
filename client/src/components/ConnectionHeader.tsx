@@ -9,9 +9,19 @@ export function ConnectionHeader() {
   const [thumbnail, setThumbnail] = useState<string | null>(null);
   const [streamTitle, setStreamTitle] = useState<string | null>(null);
 
+  useEffect(() => {
+    const savedUrl = localStorage.getItem("stream_url");
+    if (savedUrl) {
+      setUrl(savedUrl);
+      // We don't call handleSync automatically to avoid errors on page load
+      // but we could if we wanted immediate sync. For now, just set the URL.
+    }
+  }, []);
+
   const handleSync = async () => {
     if (!url) return;
     setStatus("connecting");
+    localStorage.setItem("stream_url", url);
     try {
       const res = await fetch("/api/sync", {
         method: "POST",
