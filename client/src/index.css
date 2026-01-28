@@ -74,6 +74,17 @@
     background: linear-gradient(45deg, #8a2be2, #00ffff);
   }
 
+  .animate-shake {
+    animation: shake 0.1s ease-in-out infinite;
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(-10px, 10px); }
+    50% { transform: translate(10px, -10px); }
+    75% { transform: translate(-10px, -10px); }
+  }
+
   .animate-pulse-slow {
     animation: pulse 4s infinite;
   }
