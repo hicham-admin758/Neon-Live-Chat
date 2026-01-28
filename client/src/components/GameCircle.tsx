@@ -156,13 +156,6 @@ export function GameCircle() {
             <Bomb size={20} />
             {isStarting ? "جاري البدء..." : "ابدأ القنبلة"}
           </button>
-          
-          <button 
-            onClick={resetGame}
-            className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-full font-bold transition-all"
-          >
-            تصفير اللاعبين
-          </button>
         </div>
 
         <div className="relative w-full max-w-[600px] aspect-square flex items-center justify-center bg-glass-card border border-purple-500/10 rounded-full">
