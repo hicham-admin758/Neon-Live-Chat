@@ -2,6 +2,8 @@ import { useUsers, useGameCircle } from "@/hooks/use-users";
 import { User, Bomb } from "lucide-react";
 import { useState, useEffect } from "react";
 import { io } from "socket.io-client";
+import { queryClient } from "@/lib/queryClient";
+import { api } from "@shared/routes";
 
 export function GameCircle() {
   const { data: users, isLoading } = useUsers();
@@ -16,9 +18,18 @@ export function GameCircle() {
       timer = setInterval(() => {
         setTimeLeft(prev => (prev !== null && prev > 0 ? prev - 1 : 0));
       }, 1000);
+    } else if (timeLeft === 0 && bombPlayerId) {
+      // Trigger elimination
+      fetch("/api/game/eliminate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId: bombPlayerId }),
+      }).catch(console.error);
+      setBombPlayerId(null);
+      setTimeLeft(null);
     }
     return () => clearInterval(timer);
-  }, [timeLeft]);
+  }, [timeLeft, bombPlayerId]);
 
   useEffect(() => {
     const socket = io({ path: "/socket.io" });
@@ -26,6 +37,10 @@ export function GameCircle() {
       setBombPlayerId(data.playerId);
       setIsStarting(false);
       setTimeLeft(30);
+    });
+    socket.on("player_eliminated", () => {
+      // Refresh users list via react-query
+      queryClient.invalidateQueries({ queryKey: [api.users.list.path] });
     });
     return () => {
       socket.disconnect();

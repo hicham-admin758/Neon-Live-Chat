@@ -7,6 +7,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getUsers(): Promise<User[]>;
+  updateUserStatus(id: number, status: string): Promise<User | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -26,7 +27,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUsers(): Promise<User[]> {
-    return await db.select().from(users).orderBy(users.joinedAt);
+    return await db.select().from(users).where(eq(users.lobbyStatus, "active")).orderBy(users.joinedAt);
+  }
+
+  async updateUserStatus(id: number, status: string): Promise<User | undefined> {
+    const [user] = await db.update(users).set({ lobbyStatus: status }).where(eq(users.id, id)).returning();
+    return user;
   }
 }
 

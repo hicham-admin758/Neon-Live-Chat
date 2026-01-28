@@ -130,5 +130,16 @@ export async function registerRoutes(
     res.json({ success: true, playerId: selectedPlayer.id });
   });
 
+  app.post("/api/game/eliminate", async (req, res) => {
+    const { playerId } = req.body;
+    if (!playerId) return res.status(400).json({ message: "Player ID required" });
+    
+    await storage.updateUserStatus(playerId, "eliminated");
+    currentBombHolderId = null;
+    
+    io.emit("player_eliminated", { playerId });
+    res.json({ success: true });
+  });
+
   return httpServer;
 }
