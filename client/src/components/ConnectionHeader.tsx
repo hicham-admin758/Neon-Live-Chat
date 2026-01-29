@@ -48,19 +48,18 @@ export function ConnectionHeader() {
         body: JSON.stringify({ url }),
       });
       const data = await res.json();
-      // Force connection even if metadata fails as long as we get a response
+      
       setThumbnail(data.thumbnail);
       setStreamTitle(data.title);
       setStatus("connected");
       
-      if (!res.ok && res.status !== 404) {
-        console.warn(data.message || "Sync error, but forcing connection");
+      if (!res.ok) {
+        console.warn("Sync returned error, but proceeding with defaults");
       }
     } catch (e) {
-      // Force status to connected even on catch if the user wants bypass
       setStatus("connected");
       setStreamTitle("تم الاتصال (وضع القوة)");
-      console.error("حدث خطأ في التحقق، تم تفعيل الاتصال القسري");
+      setThumbnail("https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&q=80&w=1000");
     }
   };
 

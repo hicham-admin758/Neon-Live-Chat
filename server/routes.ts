@@ -114,10 +114,16 @@ export async function registerRoutes(
         const metaUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,liveStreamingDetails&id=${videoId}&key=${YT_API_KEY}`;
         const metaRes = await fetch(metaUrl);
         const metaData = await metaRes.json();
+        
+        if (metaRes.status === 403) {
+          console.error("YouTube API Key Quota Exceeded or Invalid (403)");
+        }
+        
         const video = metaData.items?.[0];
 
         if (video) {
-          thumbnail = video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default?.url;
+          const thumbnails = video.snippet.thumbnails;
+          thumbnail = thumbnails.maxres?.url || thumbnails.high?.url || thumbnails.medium?.url || thumbnails.default?.url || thumbnail;
           title = video.snippet.title;
           activeLiveChatId = video.liveStreamingDetails?.activeLiveChatId;
         }
