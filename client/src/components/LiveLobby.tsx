@@ -26,12 +26,28 @@ export function LiveLobby() {
 
   const activePlayers = users?.filter(u => u.lobbyStatus === "active") || [];
 
+  const resetLobby = async () => {
+    try {
+      await fetch("/api/game/clear-participants", { method: "POST" });
+    } catch (e) {
+      console.error("Failed to reset lobby", e);
+    }
+  };
+
   return (
     <section id="active-players" className="py-8 px-4 bg-black/40 border-y border-purple-500/20 overflow-hidden">
-      <div className="max-w-[1400px] mx-auto flex items-center gap-6">
-        <div className="flex-shrink-0">
-          <h3 className="text-cyan-400 font-bold text-lg whitespace-nowrap">اللاعبون النشطون:</h3>
-          <p className="text-[#b8b8ff] text-xs">({activePlayers.length} لاعب)</p>
+      <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row items-center gap-6">
+        <div className="flex-shrink-0 flex items-center gap-4">
+          <div>
+            <h3 className="text-cyan-400 font-bold text-lg whitespace-nowrap">اللاعبون النشطون:</h3>
+            <p className="text-[#b8b8ff] text-xs">({activePlayers.length} لاعب)</p>
+          </div>
+          <button 
+            onClick={resetLobby}
+            className="text-[10px] bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/30 px-2 py-1 rounded transition-colors"
+          >
+            تصفير القائمة
+          </button>
         </div>
         
         <div className="flex-1 overflow-hidden relative">

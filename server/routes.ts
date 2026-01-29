@@ -183,10 +183,14 @@ export async function registerRoutes(
 
   app.post("/api/game/start-bomb", async (req, res) => {
     const users = await storage.getUsers();
-    if (users.length === 0) return res.status(400).json({ message: "No players in the circle" });
+    const activePlayers = users.filter(u => u.lobbyStatus === "active");
     
-    const randomIdx = Math.floor(Math.random() * users.length);
-    const selectedPlayer = users[randomIdx];
+    if (activePlayers.length < 2) {
+      return res.status(400).json({ message: "يجب وجود لاعبين على الأقل لبدء اللعبة" });
+    }
+    
+    const randomIdx = Math.floor(Math.random() * activePlayers.length);
+    const selectedPlayer = activePlayers[randomIdx];
     
     currentBombHolderId = selectedPlayer.id;
     io.emit("bomb_started", { playerId: selectedPlayer.id });
