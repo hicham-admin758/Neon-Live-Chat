@@ -1,0 +1,128 @@
+Skip to content
+Your Starter Plan
+Free Apps
+1/3 created
+Agent credits
+10% used
+Cloud credits
+4% used
+Install Replit on
+•
+Changelog
+Console
+npm run dev
+Secrets
+Secrets
+Secrets are accessible to anyone who has access to this App. To restrict secret access, you must update App invite permissions. For more information, visit our documentation.
+SESSION_SECRET
+••••••••
+Configurations
+Configurations are similar to secrets, but should only be used for non-sensitive information. They're useful for having a variable that's different between your published app and when testing on Replit.
+YOUTUBE_API_KEY
+AIzaSyD7pOSOZk9Q3iWbWFmUN-JyCFlP876sZrA
+Agent
+The platform now features automatic stream reconnection, persistent player lists, and a manual reset button. Ready for your live session?
+
+Reset the game, the old chat bomb
+
+The Chat Bomb game has been fully reset. Ready to start a fresh round?
+
+Please update the Chat Bomb game logic with these specific requirements:
+Remove 'Reset Players' Button: Remove the 'تصفير اللاعبين' button from the UI completely. The game should handle player management automatically.
+Elimination Logic: When the countdown timer hits zero, the bomb must 'explode' on the current holder. This player should be immediately removed/hidden from the active game circle.
+Battle Royale Mode: The game continues as players are eliminated one by one until only one person remains.
+Winner Celebration: For the last remaining player, display their avatar and name in a large, centered 'Winner' screen.
+Automatic 5-Second Restart: After the winner screen is displayed for 5 seconds, the game must automatically reset all player statuses to 'active' and prepare for a new round without any manual intervention.
+Visuals & Audio: Ensure the enlarged numbers and avatars remain clear, and the explosion sound triggers perfectly upon elimination
+
+The Battle Royale mode is now active! Players are eliminated until a winner is crowned, followed by an automatic 5-second reset. Ready for the next round?
+
+The bomb transfer via chat is not working. Please implement a smart listener in server/routes.ts:
+Smart Detection: Monitor the chat in real-time. If the current bomb holder types ONLY the ID number (e.g., '7' or '8') of another active player, transfer the bomb immediately.
+Instant Sync: Use WebSockets to ensure the bomb moves visually on everyone's screen the millisecond the number is typed.
+Validation: Ensure the bomb can only be passed to 'Active' players, not those already eliminated by the explosion.
+Fix Persistence: Also, make sure the stream link and player list are correctly saved in the database/localStorage so they don't reset on every refresh
+
+Does the instant chat transfer and automatic reconnection feel smooth for your stream?
+
+The stream link is active, but the site still shows 'Stream not found' and refuses to connect. Please fix this by:
+Bypass Verification: Disable the strict 'Stream Found' check that blocks the connection.
+Force Connection: Make the 'Start Sync' or 'Connect' button force a connection to the provided URL regardless of the initial status check.
+Debug Listener: Check the server/routes.ts file to ensure the YouTube/Kick API keys or scraping logic are not causing a false 'Offline' status.
+Keep Persistence: Ensure that after fixing this, the link and player list are still saved and the automatic 5-second game reset still works
+
+Is the connection forcing correctly for your stream link now?
+
+The stream is active and the UI is loaded, but the game is not responding to chat numbers and sometimes shows 'Stream not found'. Please fix this immediately:
+Robust Chat Connection: Rewrite the connection logic in server/routes.ts to ensure it stays connected to the YouTube Live Chat even if the API returns a temporary error.
+Bypass 'Not Found' Error: Remove the blocking popup that says 'Stream not found'. Let the site try to connect in the background without stopping the game.
+Instant Pass Logic: Double-check the 'Smart Chat Listener'. When a player like #10 types a number in the chat, the bomb MUST move instantly.
+Fix Database Sync: Ensure that players #10 and #11 are correctly registered as 'Active' in the database so the system doesn't ignore their chat commands
+
+The connection is now robust and bypasses all verification popups. Chat numbers should transfer the bomb instantly. Is it responding correctly for you now?
+
+Scrolling is not working
+
+Is scrolling working correctly now, and is the bomb responding instantly to your chat numbers?
+
+You've reached your daily free quota limit. It will reset at 12:00 AM UTC.
+
+You've reached your daily free quota limit. It will reset at 12:00 AM UTC.
+
+You've reached your daily free quota limit. It will reset at 12:00 AM UTC.
+
+Please update the platform with these 3 core functionalities:
+Live Thumbnail for Links: In the stream link input area, when I paste a new YouTube/Kick URL, automatically fetch and display the video's Thumbnail next to the input so I can verify the link visually.
+Global Lobby System (!دخول): > * Implement a global listener for the command '!دخول' in the live chat.
+When a user types this, their name and avatar must appear in the 'Active Players' (اللاعبون النشطون) list on the home page.
+Crucial: When I start 'Chat Bomb', this exact list of players must be automatically imported into the game circle.
+Fix Chat Bomb Mechanics:
+Visible IDs: Ensure every player in the circle has a large, high-contrast ID number (e.g., #1, #2) clearly visible above their avatar.
+Number-Only Passing: The current bomb holder must be able to pass the bomb by simply typing the target's ID number (e.g., typing '2') in the stream chat.
+Winning Logic: The last player remaining after all others explode is the winner. After a 5-second winner screen, reset the game for the next round
+
+I need to implement a live thumbnail fetching system, a global lobby sync, and complex gameplay logic for the Chat Bomb mechanics. These changes span multiple files and require coordinated backend/frontend updates that would be more reliably handled in Autonomous mode.
+Please update the platform with these 3 core functionalities:
+Live Thumbnail for Links: In the stream link input area, when I paste a new YouTube/Kick URL, automatically fetch and display the video's Thumbnail next to the input so I can verify the link visually.
+Global Lobby System (!دخول): > * Implement a global listener for the command '!دخول' in the live chat.
+When a user types this, their name and avatar must appear in the 'Active Players' (اللاعبون النشطون) list on the home page.
+Crucial: When I start 'Chat Bomb', this exact list of players must be automatically imported into the game circle.
+Fix Chat Bomb Mechanics:
+Visible IDs: Ensure every player in the circle has a large, high-contrast ID number (e.g., #1, #2) clearly visible above their avatar.
+Number-Only Passing: The current bomb holder must be able to pass the bomb by simply typing the target's ID number (e.g., typing '2') in the stream chat.
+Winning Logic: The last player remaining after all others explode is the winner. After a 5-second winner screen, reset the game for the next round
+
+You have reached your free quota limit
+
+Optimize Chat Bomb Game Logic & UI
+​Bug Fixes & Responsiveness: Clean up the code to ensure the "Bomb Transfer" is instant and highly responsive. Eliminate any lag when passing the bomb between players.
+​Smart Bomb Logic: Refine the game loop so it functions as a "Smart Bomb" game. The last player remaining is the winner.
+​Winner Celebration: When a player wins:
+​Scale up (enlarge) the winner's profile picture.
+​Display the winner's name prominently on the screen.
+​Keep this celebration active for 5 seconds.
+​Auto-Restart: Automatically reset the game state and start a new round immediately after the 5-second celebration ends.
+​Smooth UI: Ensure all transitions and animations are smooth.
+
+You have reached your free quota limit
+
+Please update the platform with these 3 core functionalities:
+Live Thumbnail for Links: In the stream link input area, when I paste a new YouTube/Kick URL, automatically fetch and display the video's Thumbnail next to the input so I can verify the link visually.
+Global Lobby System (!دخول): > * Implement a global listener for the command '!دخول' in the live chat.
+When a user types this, their name and avatar must appear in the 'Active Players' (اللاعبون النشطون) list on the home page.
+Crucial: When I start 'Chat Bomb', this exact list of players must be automatically imported into the game circle.
+Fix Chat Bomb Mechanics:
+Visible IDs: Ensure every player in the circle has a large, high-contrast ID number (e.g., #1, #2) clearly visible above their avatar.
+Number-Only Passing: The current bomb holder must be able to pass the bomb by simply typing the target's ID number (e.g., typing '2') in the stream chat.
+Winning Logic: The last player remaining after all others explode is the winner. After a 5-second winner screen, reset the game for the next round
+
+You have reached your free quota limit
+
+اصلح اخطاء
+
+You have reached your free quota limit
+
+اين هو رابط موقعي
+
+You have reached your free quota limit
+
