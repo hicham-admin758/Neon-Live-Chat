@@ -41,6 +41,11 @@ export function ConnectionHeader() {
     if (!url) return;
     setStatus("connecting");
     localStorage.setItem("stream_url", url);
+    
+    // Construct a predicted thumbnail as a fallback immediately
+    const videoIdMatch = url.match(/(?:v=|\/live\/|\/embed\/|youtu\.be\/)([^?&]+)/);
+    const predictedThumbnail = videoIdMatch ? `https://i.ytimg.com/vi/${videoIdMatch[1]}/hqdefault.jpg` : null;
+
     try {
       const res = await fetch("/api/sync", {
         method: "POST",
@@ -49,17 +54,13 @@ export function ConnectionHeader() {
       });
       const data = await res.json();
       
-      setThumbnail(data.thumbnail);
+      setThumbnail(data.thumbnail || predictedThumbnail);
       setStreamTitle(data.title);
       setStatus("connected");
-      
-      if (!res.ok) {
-        console.warn("Sync returned error, but proceeding with defaults");
-      }
     } catch (e) {
       setStatus("connected");
       setStreamTitle("تم الاتصال (وضع القوة)");
-      setThumbnail("https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&q=80&w=1000");
+      setThumbnail(predictedThumbnail || "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&q=80&w=1000");
     }
   };
 

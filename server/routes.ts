@@ -115,20 +115,20 @@ export async function registerRoutes(
         const metaRes = await fetch(metaUrl);
         const metaData = await metaRes.json();
         
-        if (metaRes.status === 403) {
-          console.error("YouTube API Key Quota Exceeded or Invalid (403)");
-        }
-        
         const video = metaData.items?.[0];
 
         if (video) {
           const thumbnails = video.snippet.thumbnails;
-          thumbnail = thumbnails.maxres?.url || thumbnails.high?.url || thumbnails.medium?.url || thumbnails.default?.url || thumbnail;
+          thumbnail = thumbnails.maxres?.url || thumbnails.high?.url || thumbnails.medium?.url || thumbnails.default?.url;
           title = video.snippet.title;
           activeLiveChatId = video.liveStreamingDetails?.activeLiveChatId;
+        } else {
+          // If metadata fails, try to construct a direct thumbnail URL as a fallback
+          thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
         }
       } catch (e) {
-        console.error("Metadata fetch error, bypassing:", e);
+        console.error("Metadata fetch error, using fallback thumbnail:", e);
+        thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
       }
 
       // If we still don't have activeLiveChatId, we can't poll YouTube API.
