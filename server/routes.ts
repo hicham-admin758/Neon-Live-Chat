@@ -140,12 +140,40 @@ export async function registerRoutes(
 
       if (pollingInterval) clearInterval(pollingInterval);
       if (activeLiveChatId) {
+        if (pollingInterval) clearInterval(pollingInterval);
         pollingInterval = setInterval(pollChat, 5000);
       }
 
       res.json({ thumbnail, title });
     } catch (e) {
       res.status(500).json({ message: "Sync failed" });
+    }
+  });
+
+  app.get("/api/stream-meta", async (req, res) => {
+    const { url } = req.query;
+    if (typeof url !== "string") return res.status(400).json({ message: "Invalid URL" });
+    
+    const videoIdMatch = url.match(/(?:v=|\/live\/|\/embed\/|youtu\.be\/)([^?&]+)/);
+    if (!videoIdMatch) return res.status(400).json({ message: "Invalid YouTube URL" });
+    const videoId = videoIdMatch[1];
+
+    try {
+      const metaUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YT_API_KEY}`;
+      const metaRes = await fetch(metaUrl);
+      const metaData = await metaRes.json();
+      const video = metaData.items?.[0];
+
+      if (video) {
+        res.json({
+          thumbnail: video.snippet.thumbnails.high.url,
+          title: video.snippet.title
+        });
+      } else {
+        res.status(404).json({ message: "Not found" });
+      }
+    } catch (e) {
+      res.status(500).json({ message: "Fetch failed" });
     }
   });
 

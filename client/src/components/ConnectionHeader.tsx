@@ -64,6 +64,26 @@ export function ConnectionHeader() {
     }
   };
 
+  useEffect(() => {
+    const fetchPreview = async () => {
+      if (url.includes("youtube.com") || url.includes("youtu.be")) {
+        try {
+          const res = await fetch(`/api/stream-meta?url=${encodeURIComponent(url)}`);
+          if (res.ok) {
+            const data = await res.json();
+            setThumbnail(data.thumbnail);
+            setStreamTitle(data.title);
+          }
+        } catch (e) {
+          console.error("Preview fetch failed", e);
+        }
+      }
+    };
+
+    const timer = setTimeout(fetchPreview, 500);
+    return () => clearTimeout(timer);
+  }, [url]);
+
   return (
     <div className="fixed top-0 left-0 w-full z-[1100] px-4 py-3">
       <div className="max-w-[1000px] mx-auto bg-black/60 backdrop-blur-xl border border-purple-500/30 rounded-2xl p-3 md:p-4 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
