@@ -1,7 +1,29 @@
 import { useUsers } from "@/hooks/use-users";
+import { useEffect } from "react";
+import { io } from "socket.io-client";
+import { queryClient } from "@/lib/queryClient";
+import { api } from "@shared/routes";
 
 export function LiveLobby() {
   const { data: users, isLoading } = useUsers();
+  
+  useEffect(() => {
+    const socket = io({ path: "/socket.io" });
+    
+    const handleUpdate = () => {
+      queryClient.invalidateQueries({ queryKey: [api.users.list.path] });
+    };
+
+    socket.on("new_player", handleUpdate);
+    socket.on("player_eliminated", handleUpdate);
+    socket.on("game_reset", handleUpdate);
+    socket.on("game_winner", handleUpdate);
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
   const activePlayers = users?.filter(u => u.lobbyStatus === "active") || [];
 
   return (

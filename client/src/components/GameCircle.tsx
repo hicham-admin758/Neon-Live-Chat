@@ -94,16 +94,16 @@ export function GameCircle() {
   useEffect(() => {
     const socket = io({ path: "/socket.io" });
     socket.on("bomb_started", (data: { playerId: number }) => {
-      const isNewRound = timeLeft === null;
-      if (!isNewRound) {
-        playSound("pass");
-      }
       setBombPlayerId(data.playerId);
       setIsStarting(false);
       setTimeLeft(30);
+      playSound("pass");
     });
-    socket.on("player_eliminated", () => {
-      // Refresh users list via react-query
+    socket.on("player_eliminated", (data: { playerId: number }) => {
+      if (data.playerId === bombPlayerId) {
+        setBombPlayerId(null);
+        setTimeLeft(null);
+      }
       queryClient.invalidateQueries({ queryKey: [api.users.list.path] });
     });
     socket.on("game_reset", () => {

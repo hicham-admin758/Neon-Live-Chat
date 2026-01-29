@@ -206,13 +206,14 @@ export async function registerRoutes(
     io.emit("player_eliminated", { playerId });
 
     const activeUsers = await storage.getUsers();
-    if (activeUsers.length === 1) {
-      io.emit("game_winner", activeUsers[0]);
+    const stillActive = activeUsers.filter(u => u.lobbyStatus === "active");
+    
+    if (stillActive.length === 1) {
+      io.emit("game_winner", stillActive[0]);
       currentBombHolderId = null;
-    } else if (activeUsers.length > 1 && currentBombHolderId === null) {
-      // Auto-pass bomb if holder exploded
-      const nextIdx = Math.floor(Math.random() * activeUsers.length);
-      currentBombHolderId = activeUsers[nextIdx].id;
+    } else if (stillActive.length > 1 && currentBombHolderId === null) {
+      const nextIdx = Math.floor(Math.random() * stillActive.length);
+      currentBombHolderId = stillActive[nextIdx].id;
       io.emit("bomb_started", { playerId: currentBombHolderId });
     }
     
