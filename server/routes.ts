@@ -49,8 +49,10 @@ export async function registerRoutes(
         if (lastMessageTime && publishTime <= lastMessageTime) continue;
         
         const cleanText = text.trim();
+        console.log(`Received message: "${cleanText}"`);
         
-        if (cleanText === "!دخول") {
+        // Match "!دخول" anywhere in the message to be more flexible
+        if (cleanText.includes("!دخول")) {
           const author = msg.authorDetails;
           const username = author.displayName;
           const avatarUrl = author.profileImageUrl;
@@ -65,9 +67,11 @@ export async function registerRoutes(
               lobbyStatus: "active"
             });
             io.emit("new_player", user);
+            console.log(`New player joined: ${username}`);
           } else if (existing.lobbyStatus !== "active") {
             await storage.updateUserStatus(existing.id, "active");
             io.emit("new_player", { ...existing, lobbyStatus: "active" });
+            console.log(`Existing player rejoined: ${username}`);
           }
         }
 
@@ -137,8 +141,13 @@ export async function registerRoutes(
         activeLiveChatId = videoId; // Fallback attempt
       }
 
-      if (pollingInterval) clearInterval(pollingInterval);
-      pollingInterval = setInterval(pollChat, 5000);
+      if (activeLiveChatId) {
+        if (pollingInterval) clearInterval(pollingInterval);
+        console.log(`Starting chat poll for chatId: ${activeLiveChatId}`);
+        pollingInterval = setInterval(pollChat, 5000);
+      } else {
+        console.error("No activeLiveChatId available to start polling");
+      }
 
       res.json({ thumbnail, title });
     } catch (e) {
