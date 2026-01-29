@@ -34,11 +34,17 @@ export async function registerRoutes(
     try {
       const url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${activeLiveChatId}&part=snippet,authorDetails&maxResults=200&key=${YT_API_KEY}`;
       const res = await fetch(url);
+      
+      if (res.status === 403) {
+        console.error("YouTube API 403: Quota exceeded or Access Denied. Chat polling paused.");
+        return;
+      }
+
       if (!res.ok) {
-        // Log but don't crash
         console.error(`YouTube API error: ${res.status}`);
         return;
       }
+      
       const data = await res.json();
       const messages = data.items || [];
 
@@ -49,10 +55,10 @@ export async function registerRoutes(
         if (lastMessageTime && publishTime <= lastMessageTime) continue;
         
         const cleanText = text.trim();
-        console.log(`Received message: "${cleanText}"`);
+        console.log(`[Chat] Received: "${cleanText}" from ${msg.authorDetails.displayName}`);
         
-        // Match "!دخول" anywhere in the message to be more flexible
-        if (cleanText.includes("!دخول")) {
+        // Flexible matching for join command
+        if (cleanText.toLowerCase().includes("!دخول") || cleanText.toLowerCase().includes("!join")) {
           const author = msg.authorDetails;
           const username = author.displayName;
           const avatarUrl = author.profileImageUrl;
@@ -67,11 +73,11 @@ export async function registerRoutes(
               lobbyStatus: "active"
             });
             io.emit("new_player", user);
-            console.log(`New player joined: ${username}`);
+            console.log(`[Lobby] New Player: ${username} (ID: ${user.id})`);
           } else if (existing.lobbyStatus !== "active") {
             await storage.updateUserStatus(existing.id, "active");
             io.emit("new_player", { ...existing, lobbyStatus: "active" });
-            console.log(`Existing player rejoined: ${username}`);
+            console.log(`[Lobby] Re-joined: ${username} (ID: ${existing.id})`);
           }
         }
 
@@ -82,16 +88,13 @@ export async function registerRoutes(
           const sender = await storage.getUserByUsername(senderName);
           
           if (sender && sender.id === currentBombHolderId) {
-            const cleanText = text.trim();
             const targetId = parseInt(cleanText);
-            
-            // Pass bomb by typing ONLY the target's ID number
             if (!isNaN(targetId) && targetId !== currentBombHolderId && /^\d+$/.test(cleanText)) {
               const targetUser = await storage.getUser(targetId);
               if (targetUser && targetUser.lobbyStatus === "active") {
                 currentBombHolderId = targetId;
                 io.emit("bomb_started", { playerId: targetId });
-                console.log(`Bomb transferred from ${sender.id} to ${targetId}`);
+                console.log(`[Game] Bomb Pass: ${sender.id} -> ${targetId}`);
               }
             }
           }
@@ -99,7 +102,7 @@ export async function registerRoutes(
         lastMessageTime = publishTime;
       }
     } catch (e) {
-      console.error("Chat polling error (retrying):", e);
+      console.error("Chat polling error:", e);
     }
   }
 
