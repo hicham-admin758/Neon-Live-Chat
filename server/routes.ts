@@ -75,14 +75,13 @@ export async function registerRoutes(
         if (currentBombHolderId) {
           const author = msg.authorDetails;
           const senderName = author.displayName;
-          
-          // Use storage to find sender by username
           const sender = await storage.getUserByUsername(senderName);
           
           if (sender && sender.id === currentBombHolderId) {
-            // Check if text is JUST a number
+            const cleanText = text.trim();
             const targetId = parseInt(cleanText);
-            // Validation: Must be a number, not the holder, and exists in DB as active
+            
+            // Pass bomb by typing ONLY the target's ID number
             if (!isNaN(targetId) && targetId !== currentBombHolderId && /^\d+$/.test(cleanText)) {
               const targetUser = await storage.getUser(targetId);
               if (targetUser && targetUser.lobbyStatus === "active") {
