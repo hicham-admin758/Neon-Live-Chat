@@ -181,7 +181,8 @@ export async function registerRoutes(
           pollingInterval = null;
         }
         console.log(`Starting chat poll for chatId: ${activeLiveChatId}`);
-        pollingInterval = setInterval(pollChat, 5000);
+        // Increase polling interval to 15 seconds to save quota
+        pollingInterval = setInterval(pollChat, 15000);
       } else {
         console.error("No activeLiveChatId available to start polling");
       }
