@@ -117,14 +117,9 @@ export async function registerRoutes(
         const video = metaData.items?.[0];
 
         if (video) {
-          thumbnail = video.snippet.thumbnails.high.url;
+          thumbnail = video.snippet.thumbnails.high?.url || video.snippet.thumbnails.default?.url;
           title = video.snippet.title;
           activeLiveChatId = video.liveStreamingDetails?.activeLiveChatId;
-        } else {
-          // Force activeLiveChatId guess or manual entry if needed, 
-          // but for now let's just use the video ID as a fallback for chat if possible
-          // or just assume it might work later.
-          console.warn("Stream metadata not found, forcing connection anyway");
         }
       } catch (e) {
         console.error("Metadata fetch error, bypassing:", e);
@@ -132,16 +127,12 @@ export async function registerRoutes(
 
       // If we still don't have activeLiveChatId, we can't poll YouTube API.
       // However, the user wants to FORCE connection. 
-      // Some streams use videoId as chatId or it can be fetched differently.
       if (!activeLiveChatId) {
         activeLiveChatId = videoId; // Fallback attempt
       }
 
       if (pollingInterval) clearInterval(pollingInterval);
-      if (activeLiveChatId) {
-        if (pollingInterval) clearInterval(pollingInterval);
-        pollingInterval = setInterval(pollChat, 5000);
-      }
+      pollingInterval = setInterval(pollChat, 5000);
 
       res.json({ thumbnail, title });
     } catch (e) {

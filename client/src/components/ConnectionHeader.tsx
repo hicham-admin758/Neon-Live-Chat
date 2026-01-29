@@ -67,9 +67,7 @@ export function ConnectionHeader() {
   useEffect(() => {
     const fetchPreview = async () => {
       const youtubeMatch = url.match(/(?:v=|\/live\/|\/embed\/|youtu\.be\/)([^?&]+)/);
-      const kickMatch = url.match(/kick\.com\/([^/?#&]+)/);
-      
-      if (youtubeMatch || kickMatch) {
+      if (youtubeMatch) {
         try {
           const res = await fetch(`/api/stream-meta?url=${encodeURIComponent(url)}`);
           if (res.ok) {
