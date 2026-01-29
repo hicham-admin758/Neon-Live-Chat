@@ -199,9 +199,24 @@ export async function registerRoutes(
     if (!playerId) return res.status(400).json({ message: "Player ID required" });
     
     await storage.updateUserStatus(playerId, "eliminated");
-    currentBombHolderId = null;
+    
+    if (currentBombHolderId === playerId) {
+      currentBombHolderId = null;
+    }
     
     io.emit("player_eliminated", { playerId });
+
+    const activeUsers = await storage.getUsers();
+    if (activeUsers.length === 1) {
+      io.emit("game_winner", activeUsers[0]);
+      currentBombHolderId = null;
+    } else if (activeUsers.length > 1 && currentBombHolderId === null) {
+      // Auto-pass bomb if holder exploded
+      const nextIdx = Math.floor(Math.random() * activeUsers.length);
+      currentBombHolderId = activeUsers[nextIdx].id;
+      io.emit("bomb_started", { playerId: currentBombHolderId });
+    }
+    
     res.json({ success: true });
   });
 

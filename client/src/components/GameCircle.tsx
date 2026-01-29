@@ -112,6 +112,22 @@ export function GameCircle() {
       setWinner(null);
       queryClient.invalidateQueries({ queryKey: [api.users.list.path] });
     });
+    socket.on("game_winner", (winnerData: User) => {
+      setWinner(winnerData);
+      setBombPlayerId(null);
+      setTimeLeft(null);
+      playSound("victory");
+      
+      // Auto-restart after 5 seconds
+      setTimeout(async () => {
+        try {
+          await fetch("/api/game/reset", { method: "POST" });
+          setWinner(null);
+        } catch (e) {
+          console.error("Auto-restart failed", e);
+        }
+      }, 5000);
+    });
     return () => {
       socket.disconnect();
     };
@@ -160,22 +176,36 @@ export function GameCircle() {
 
         <div className="relative w-full max-w-[600px] aspect-square flex items-center justify-center bg-glass-card border border-purple-500/10 rounded-full">
           {winner && (
-            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-md rounded-full animate-in fade-in zoom-in duration-500">
-              <div className="text-yellow-400 animate-bounce mb-4">
-                <Bomb size={64} fill="currentColor" className="rotate-12" />
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-xl rounded-full animate-in fade-in zoom-in duration-500">
+              <div className="relative mb-8 group">
+                <div className="absolute -inset-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full blur-xl opacity-50 animate-pulse" />
+                <div className="relative w-48 h-48 rounded-full p-1 bg-gradient-to-br from-yellow-400 via-orange-500 to-yellow-400 shadow-[0_0_50px_rgba(250,204,21,0.5)] animate-bounce-slow">
+                  <div className="w-full h-full rounded-full bg-[#1a1f3a] overflow-hidden border-4 border-yellow-400">
+                    {winner.avatarUrl ? (
+                      <img src={winner.avatarUrl} alt={winner.username} className="w-full h-full object-cover scale-110" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-5xl font-black text-white uppercase">
+                        {winner.username.slice(0, 2)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="absolute -top-6 -right-6 text-yellow-400 rotate-12 animate-wiggle">
+                  <Bomb size={64} fill="currentColor" />
+                </div>
               </div>
-              <h3 className="text-4xl font-black text-white mb-2 text-center px-4">
-                مبروك الفوز!
-              </h3>
-              <div className="text-2xl font-bold text-cyan-400 mb-6 uppercase tracking-widest">
-                {winner.username}
+              
+              <div className="text-center space-y-4 px-6 relative">
+                <h3 className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-400 drop-shadow-2xl">
+                  الفائز بالمباراة!
+                </h3>
+                <div className="text-3xl md:text-4xl font-bold text-cyan-400 tracking-tighter drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">
+                  {winner.username}
+                </div>
+                <div className="text-white/50 text-sm font-medium tracking-widest uppercase pt-4 animate-pulse">
+                  سيبدأ التحدي التالي قريباً...
+                </div>
               </div>
-              <button 
-                onClick={() => setWinner(null)}
-                className="btn-gradient text-white px-8 py-2 rounded-full font-bold text-sm"
-              >
-                إغلاق
-              </button>
             </div>
           )}
           {timeLeft !== null && (
