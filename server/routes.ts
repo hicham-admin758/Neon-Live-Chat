@@ -23,30 +23,45 @@ export async function registerRoutes(
   let currentBombHolderId: number | null = null;
 
   async function getLiveChatId(videoId: string) {
+    console.log(`Fetching liveChatId for video: ${videoId}`);
     const url = `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}&key=${YT_API_KEY}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    return data.items?.[0]?.liveStreamingDetails?.activeLiveChatId;
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      const chatId = data.items?.[0]?.liveStreamingDetails?.activeLiveChatId;
+      console.log(`YouTube API Response for liveChatId: ${chatId ? "Found" : "Not Found"}`);
+      return chatId;
+    } catch (e) {
+      console.error("Error fetching liveChatId:", e);
+      return null;
+    }
   }
 
   async function pollChat() {
-    if (!activeLiveChatId || !YT_API_KEY) return;
+    if (!activeLiveChatId || !YT_API_KEY) {
+      console.warn(`Polling skipped: activeLiveChatId=${activeLiveChatId}, hasAPIKey=${!!YT_API_KEY}`);
+      return;
+    }
     try {
       const url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${activeLiveChatId}&part=snippet,authorDetails&maxResults=200&key=${YT_API_KEY}`;
+      console.log(`Polling YouTube Chat: ${url.replace(YT_API_KEY, "HIDDEN")}`);
       const res = await fetch(url);
       
       if (res.status === 403) {
-        console.error("YouTube API 403: Quota exceeded or Access Denied. Chat polling paused.");
+        const errorData = await res.json().catch(() => ({}));
+        console.error("YouTube API 403 Error Details:", JSON.stringify(errorData));
         return;
       }
 
       if (!res.ok) {
-        console.error(`YouTube API error: ${res.status}`);
+        const errorText = await res.text().catch(() => "Unknown error");
+        console.error(`YouTube API error (${res.status}): ${errorText}`);
         return;
       }
       
       const data = await res.json();
       const messages = data.items || [];
+      console.log(`Polled ${messages.length} messages from YouTube`);
 
       for (const msg of messages) {
         const text = msg.snippet.displayMessage;
@@ -55,10 +70,20 @@ export async function registerRoutes(
         if (lastMessageTime && publishTime <= lastMessageTime) continue;
         
         const cleanText = text.trim();
-        console.log(`[Chat] Received: "${cleanText}" from ${msg.authorDetails.displayName}`);
+        console.log(`[Chat Log] "${cleanText}" from ${msg.authorDetails.displayName}`);
         
-        // Flexible matching for join command
-        if (cleanText.toLowerCase().includes("!دخول") || cleanText.toLowerCase().includes("!join")) {
+        // Flexible matching for join command with more variations
+        const lowerText = cleanText.toLowerCase();
+        const isJoinCommand = 
+          lowerText.includes("!دخول") || 
+          lowerText.includes("!دخول") || 
+          lowerText.includes("!join") ||
+          lowerText === "!دخول" ||
+          lowerText === "!دخول " ||
+          lowerText.startsWith("!دخول") ||
+          lowerText.includes("!دخول"); // Added another common variation just in case
+
+        if (isJoinCommand) {
           const author = msg.authorDetails;
           const username = author.displayName;
           const avatarUrl = author.profileImageUrl;
@@ -73,11 +98,11 @@ export async function registerRoutes(
               lobbyStatus: "active"
             });
             io.emit("new_player", user);
-            console.log(`[Lobby] New Player: ${username} (ID: ${user.id})`);
+            console.log(`[Lobby SUCCESS] New Player Added: ${username}`);
           } else if (existing.lobbyStatus !== "active") {
             await storage.updateUserStatus(existing.id, "active");
             io.emit("new_player", { ...existing, lobbyStatus: "active" });
-            console.log(`[Lobby] Re-joined: ${username} (ID: ${existing.id})`);
+            console.log(`[Lobby SUCCESS] Player Reactivated: ${username}`);
           }
         }
 
@@ -138,10 +163,16 @@ export async function registerRoutes(
         thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
       }
 
-      // If we still don't have activeLiveChatId, we can't poll YouTube API.
-      // However, the user wants to FORCE connection. 
+      // If we still don't have activeLiveChatId, try to fetch it properly
       if (!activeLiveChatId) {
-        activeLiveChatId = videoId; // Fallback attempt
+        console.log("No activeLiveChatId found in sync, trying to fetch it now...");
+        activeLiveChatId = await getLiveChatId(videoId);
+      }
+
+      // Final fallback if getLiveChatId fails
+      if (!activeLiveChatId) {
+        activeLiveChatId = videoId; 
+        console.log(`Falling back to videoId as chatId: ${activeLiveChatId}`);
       }
 
       if (activeLiveChatId) {
