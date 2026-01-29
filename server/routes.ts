@@ -176,7 +176,10 @@ export async function registerRoutes(
       }
 
       if (activeLiveChatId) {
-        if (pollingInterval) clearInterval(pollingInterval);
+        if (pollingInterval) {
+          clearInterval(pollingInterval);
+          pollingInterval = null;
+        }
         console.log(`Starting chat poll for chatId: ${activeLiveChatId}`);
         pollingInterval = setInterval(pollChat, 5000);
       } else {
