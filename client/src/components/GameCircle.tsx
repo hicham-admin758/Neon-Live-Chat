@@ -21,7 +21,7 @@ export function GameCircle() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [winner, setWinner] = useState<User | null>(null);
   const [explodingId, setExplodingId] = useState<number | null>(null);
-  
+
   const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({});
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export function GameCircle() {
     if (users && users.length === 1 && bombPlayerId === null && timeLeft === null) {
       setWinner(users[0]);
       playSound("victory");
-      
+
       // Auto-reset after 5 seconds
       const timeout = setTimeout(async () => {
         try {
@@ -55,7 +55,7 @@ export function GameCircle() {
           console.error("Failed to reset game", e);
         }
       }, 5000);
-      
+
       return () => clearTimeout(timeout);
     } else {
       setWinner(null);
@@ -75,7 +75,7 @@ export function GameCircle() {
     } else if (timeLeft === 0 && bombPlayerId) {
       playSound("explosion");
       setExplodingId(bombPlayerId);
-      
+
       // Screen shake effect handled via state/className on main container
       setTimeout(() => setExplodingId(null), 1000);
 
@@ -117,7 +117,7 @@ export function GameCircle() {
       setBombPlayerId(null);
       setTimeLeft(null);
       playSound("victory");
-      
+
       // Auto-restart after 5 seconds
       setTimeout(async () => {
         try {
@@ -151,11 +151,20 @@ export function GameCircle() {
     }
   };
 
-  const radius = 140; // Increased circle radius for larger avatars
+  // Dynamic radius calculation based on number of players
+  const getRadius = () => {
+    if (!users || users.length === 0) return 140;
+    if (users.length <= 5) return 140;
+    if (users.length <= 10) return 180;
+    if (users.length <= 15) return 220;
+    return 260; // For more than 15 players
+  };
+
+  const radius = getRadius();
 
   return (
-    <section id="game-circle" className={`py-16 px-8 max-w-[1400px] mx-auto w-full transition-transform duration-100 ${explodingId ? 'animate-shake' : ''}`}>
-      <div className="flex flex-col items-center gap-8">
+    <section id="game-circle" className={`py-16 px-8 max-w-[1400px] mx-auto w-full transition-transform duration-100 ${explodingId ? 'animate-shake' : ''} overflow-y-auto max-h-screen`}>
+      <div className="flex flex-col items-center gap-8 min-h-full">
         <h2 className="text-center text-[2.5rem] mb-4 relative pb-4 after:content-[''] after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:w-[100px] after:h-[4px] after:bg-gradient-to-r after:from-[#8a2be2] after:to-[#00ffff] after:rounded-sm">
           ساحة اللعب المباشرة
           <span className="block text-sm font-normal text-cyan-400 mt-2">
@@ -174,7 +183,11 @@ export function GameCircle() {
           </button>
         </div>
 
-        <div className="relative w-full max-w-[600px] aspect-square flex items-center justify-center bg-glass-card border border-purple-500/10 rounded-full">
+        <div className={`relative w-full max-w-[600px] flex items-center justify-center bg-glass-card border border-purple-500/10 rounded-full overflow-visible ${
+          users && users.length > 10 ? 'min-h-[700px] min-w-[700px]' : 
+          users && users.length > 5 ? 'min-h-[600px] min-w-[600px]' : 
+          'aspect-square'
+        }`}>
           {winner && (
             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-xl rounded-full animate-in fade-in zoom-in duration-500">
               <div className="relative mb-8 group">
@@ -194,7 +207,7 @@ export function GameCircle() {
                   <Bomb size={64} fill="currentColor" />
                 </div>
               </div>
-              
+
               <div className="text-center space-y-4 px-6 relative">
                 <h3 className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-400 drop-shadow-2xl">
                   الفائز بالمباراة!
@@ -249,7 +262,7 @@ export function GameCircle() {
                         <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-cyan-400 text-black text-xl font-black px-5 py-1.5 rounded-full border-2 border-white shadow-[0_0_25px_rgba(0,255,255,0.9)] z-[60] min-w-[60px] text-center pointer-events-none">
                           #{user.id}
                         </div>
-                        
+
                         <div className={`relative w-28 h-28 rounded-full p-[4px] transition-all duration-300 ${
                           isHoldingBomb 
                             ? "bg-red-500 shadow-[0_0_40px_rgba(239,68,68,1)] scale-110 z-20" 

@@ -15,17 +15,17 @@ export default function Home() {
 
   if (activeGame === "chat-bomb") {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center p-4 relative" dir="rtl">
+      <div className="min-h-screen h-screen bg-[#0a0a0a] flex flex-col items-center justify-start p-4 relative overflow-y-auto" dir="rtl">
         <Button 
           variant="ghost" 
-          className="absolute top-8 right-8 text-white/70 hover:text-white"
+          className="absolute top-8 right-8 text-white/70 hover:text-white z-50"
           onClick={() => setActiveGame(null)}
           data-testid="button-back-to-lobby"
         >
           <ArrowLeft className="ml-2" />
           العودة للرئيسية
         </Button>
-        <div className="w-full max-w-4xl">
+        <div className="w-full max-w-4xl py-16">
           <GameCircle />
         </div>
       </div>
@@ -36,22 +36,22 @@ export default function Home() {
     <div className="min-h-screen flex flex-col" dir="rtl">
       <ConnectionHeader />
       <Header />
-      
+
       <main className="mt-[160px] md:mt-[180px]">
         <LiveLobby />
-        
+
         {/* Hero Section */}
         <section id="home" className="py-16 px-8 text-center relative overflow-hidden">
           <div className="absolute w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(138,43,226,0.3),transparent)] -top-[200px] -right-[200px] rounded-full animate-pulse-slow pointer-events-none"></div>
-          
+
           <h1 className="text-[2rem] md:text-[3.5rem] mb-6 font-bold text-gradient-hero animate-gradient-shift">
             منصة ألعاب التفاعل المباشر
           </h1>
-          
+
           <p className="text-[1rem] md:text-[1.3rem] text-[#b8b8ff] mb-8 max-w-[800px] mx-auto leading-relaxed">
             انضم إلى آلاف اللاعبين حول العالم في تجربة ألعاب تفاعلية مباشرة بجودة عالية ومنافسات مثيرة
           </p>
-          
+
           <a 
             href="#games" 
             className="btn-gradient text-white text-[1.2rem] px-12 py-4 rounded-[25px] font-bold inline-block transition-all hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(138,43,226,0.4)]"
@@ -72,7 +72,7 @@ export default function Home() {
           <h2 className="text-center text-[2.5rem] mb-12 relative pb-4 after:content-[''] after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:w-[100px] after:h-[4px] after:bg-gradient-to-r after:from-[#8a2be2] after:to-[#00ffff] after:rounded-sm">
             الألعاب الأكثر شعبية
           </h2>
-          
+
           <div className="flex justify-center">
             <div className="w-full max-w-[450px]">
               <GameCard 
@@ -92,7 +92,7 @@ export default function Home() {
           <h2 className="text-center text-[2.5rem] mb-12 relative pb-4 after:content-[''] after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:w-[100px] after:h-[4px] after:bg-gradient-to-r after:from-[#8a2be2] after:to-[#00ffff] after:rounded-sm">
             لماذا تختار منصتنا؟
           </h2>
-          
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-[1200px] mx-auto">
             <FeatureCard 
               icon="⚡" 
