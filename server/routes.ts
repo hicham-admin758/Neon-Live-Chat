@@ -188,6 +188,13 @@ export async function registerRoutes(
       currentBombHolderId = null;
       io.emit("game_winner", winner);
       console.log(`🏆 الفائز هو: ${winner.username}`);
+      
+      // إعادة التشغيل التلقائي بعد 5 ثوانٍ
+      setTimeout(async () => {
+        await storage.resetAllUsersStatus();
+        io.emit("game_reset");
+        console.log("🔄 تم إعادة تشغيل اللعبة تلقائياً");
+      }, 5000);
     } 
     // استمرار اللعبة
     else if (active.length > 1) {
