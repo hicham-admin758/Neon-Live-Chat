@@ -1,265 +1,187 @@
-import { useUsers, useGameCircle } from "@/hooks/use-users";
-import { Bomb, Trophy, Skull, Play, RotateCcw, Users } from "lucide-react";
-import { useState, useEffect } from "react";
-import { io } from "socket.io-client";
-import { queryClient } from "@/lib/queryClient";
+import { z } from "zod";
+import { Server } from "http";
+import { Server as SocketIOServer } from "socket.io";
+import { Express } from "express";
+import { storage } from "./storage";
 import { api } from "@shared/routes";
-import { type User } from "@shared/schema";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
 
-// روابط الأصوات
-const SOUNDS = {
-  tick: "https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3",
-  explosion: "https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3",
-  pass: "https://assets.mixkit.co/active_storage/sfx/2572/2572-preview.mp3",
-  victory: "https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3"
-};
+export async function registerRoutes(
+  httpServer: Server,
+  app: Express
+): Promise<Server> {
+  const io = new SocketIOServer(httpServer, {
+    path: "/socket.io",
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
+    },
+  });
 
-export function GameCircle() {
-  const { data: users, isLoading } = useUsers();
-  const { toast } = useToast();
-  const [bombPlayerId, setBombPlayerId] = useState<number | null>(null);
-  const [winner, setWinner] = useState<User | null>(null);
-  const [explodingId, setExplodingId] = useState<number | null>(null);
+  const YT_API_KEY = process.env.YOUTUBE_API_KEY;
+  let activeLiveChatId: string | null = null;
+  let pollingInterval: NodeJS.Timeout | null = null;
+  let nextPageToken: string | null = null;
+  let messageCache = new Set<string>();
+  let currentBombHolderId: number | null = null;
+  let isPolling = false;
+  let gameActive = false; // تتبع حالة اللعبة لتقليل الاستهلاك
 
-  // تشغيل الأصوات
-  const playSound = (type: keyof typeof SOUNDS) => {
-    try {
-      const audio = new Audio(SOUNDS[type]);
-      audio.volume = 0.6;
-      audio.play().catch(e => console.log("Audio play failed", e));
-    } catch (e) {
-      console.error("Sound error", e);
+  // --- وظائف مساعدة ذكية ---
+
+  async function checkWinner() {
+    const users = await storage.getUsers();
+    const active = users.filter(u => u.lobbyStatus === "active");
+
+    if (active.length === 1 && gameActive) {
+      const winner = active[0];
+      gameActive = false;
+      currentBombHolderId = null;
+      io.emit("game_winner", winner);
+      console.log(`🏆 الفائز المكتشف: ${winner.username}`);
+      return true;
     }
-  };
-
-  // التحكم في اللعبة
-  const handleStartGame = async () => {
-    try {
-      await api.post("/api/game/start-bomb");
-      toast({ title: "بدأت اللعبة!", description: "القنبلة انطلقت الآن 💣" });
-    } catch (e) {
-      toast({ title: "خطأ", description: "يجب وجود لاعبين اثنين على الأقل", variant: "destructive" });
-    }
-  };
-
-  const handleResetGame = async () => {
-    try {
-      await api.post("/api/game/reset");
-      setWinner(null);
-      setBombPlayerId(null);
-      setExplodingId(null);
-      toast({ title: "تمت إعادة التعيين", description: "اللعبة جاهزة لجولة جديدة" });
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  useEffect(() => {
-    const socket = io(window.location.origin, { path: "/socket.io" });
-
-    socket.on("bomb_started", ({ playerId }) => {
-      console.log(`💣 Bomb passed to: ${playerId}`);
-      if (bombPlayerId !== playerId) {
-        playSound("pass");
-        setBombPlayerId(playerId);
-        setWinner(null);
-      }
-    });
-
-    socket.on("player_eliminated", ({ playerId }) => {
-      console.log(`💥 Eliminated: ${playerId}`);
-      playSound("explosion");
-      setExplodingId(playerId);
-
-      if (bombPlayerId === playerId) {
-        setBombPlayerId(null);
-      }
-
-      setTimeout(() => {
-        setExplodingId(null);
-        queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      }, 1500);
-    });
-
-    socket.on("game_winner", (winnerUser: User) => {
-      console.log(`🏆 Winner: ${winnerUser.username}`);
-      playSound("victory");
-      setWinner(winnerUser);
-      setBombPlayerId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-    });
-
-    socket.on("game_reset", () => {
-      setWinner(null);
-      setBombPlayerId(null);
-      setExplodingId(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-    });
-
-    socket.on("new_player", () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [bombPlayerId]);
-
-  // حساب نصف القطر
-  const activePlayers = users?.filter(u => u.lobbyStatus === "active") || [];
-
-  const getRadius = () => {
-    const count = activePlayers.length;
-    if (count <= 5) return 140;
-    if (count <= 10) return 190;
-    if (count <= 15) return 240;
-    return 300;
-  };
-
-  const radius = getRadius();
-
-  // === حالة التحميل ===
-  if (isLoading) {
-    return <div className="text-white text-center mt-20">جاري تحميل الساحة...</div>;
+    return false;
   }
 
-  // === شاشة الفوز ===
-  if (winner) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] animate-in zoom-in duration-500">
-        <Trophy size={120} className="text-yellow-400 mb-6 drop-shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-bounce" />
-        <h2 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-300 mb-4 text-center">
-          {winner.username}
-        </h2>
-        <p className="text-3xl text-white/90 font-bold mb-8">👑 بطل الساحة 👑</p>
-        <Button onClick={handleResetGame} size="lg" className="bg-white text-black hover:bg-gray-200 font-bold">
-          <RotateCcw className="mr-2 h-5 w-5" /> لعبة جديدة
-        </Button>
-      </div>
-    );
+  async function pollChat() {
+    // ذكاء اصطناعي: لا تسحب بيانات إذا لم يكن هناك شات أو كوتا
+    if (!activeLiveChatId || !YT_API_KEY || isPolling) return;
+
+    isPolling = true;
+    try {
+      let url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${activeLiveChatId}&part=snippet,authorDetails&maxResults=200&key=${YT_API_KEY}`;
+      if (nextPageToken) url += `&pageToken=${nextPageToken}`;
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        if (res.status === 403) console.error("⚠️ خطأ في الكوتا - توقف مؤقتاً");
+        return;
+      }
+
+      const data = await res.json();
+      nextPageToken = data.nextPageToken || nextPageToken;
+      const messages = data.items || [];
+
+      for (const msg of messages) {
+        const text = msg.snippet?.displayMessage || "";
+        const messageId = msg.id;
+        const author = msg.authorDetails;
+
+        if (messageCache.has(messageId)) continue;
+        messageCache.add(messageId);
+        if (messageCache.size > 1000) messageCache.clear();
+
+        // 1. منطق الانضمام الذكي
+        if (/!?(دخول|join|انضمام)/i.test(text)) {
+          const existing = await storage.getUserByUsername(author.displayName);
+          if (!existing) {
+            const user = await storage.createUser({
+              username: author.displayName,
+              avatarUrl: author.profileImageUrl,
+              externalId: author.channelId,
+              lobbyStatus: "active"
+            });
+            io.emit("new_player", user);
+          } else if (existing.lobbyStatus !== "active") {
+            await storage.updateUserStatus(existing.id, "active");
+            io.emit("new_player", { ...existing, lobbyStatus: "active" });
+          }
+        }
+
+        // 2. منطق التمرير الذكي (Smart Pass)
+        if (currentBombHolderId && gameActive) {
+          const sender = await storage.getUserByUsername(author.displayName);
+          if (sender && sender.id === currentBombHolderId) {
+            // استخراج الرقم بذكاء أو المنشن
+            const numberMatch = text.match(/\d+/);
+            if (numberMatch) {
+              const targetId = parseInt(numberMatch[0]);
+              const allUsers = await storage.getUsers();
+              const targetUser = allUsers.find(u => u.id === targetId && u.lobbyStatus === "active");
+
+              if (targetUser && targetUser.id !== currentBombHolderId) {
+                currentBombHolderId = targetUser.id;
+                io.emit("bomb_started", { playerId: targetUser.id });
+                console.log(`✅ مررت لـ ${targetUser.username}`);
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Poll Error:", error);
+    } finally {
+      isPolling = false;
+    }
   }
 
-  // === ساحة اللعب ===
-  return (
-    <div className="w-full flex flex-col items-center relative min-h-[80vh]">
+  // --- API Routes ---
 
-      {/* 🎮 لوحة التحكم العلوية */}
-      <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-4 z-50 bg-black/50 backdrop-blur-md p-2 rounded-full border border-white/10">
-        <Button 
-          onClick={handleStartGame} 
-          disabled={activePlayers.length < 2 || bombPlayerId !== null}
-          className="bg-green-600 hover:bg-green-700 text-white font-bold"
-        >
-          <Play className="mr-2 h-4 w-4" /> ابدأ
-        </Button>
+  app.post("/api/sync", async (req, res) => {
+    const { url } = req.body;
+    const videoIdMatch = url.match(/(?:v=|\/live\/|\/embed\/|youtu\.be\/)([^?&]+)/);
+    if (!videoIdMatch) return res.status(400).json({ message: "رابط غير صالح" });
 
-        <Button 
-          onClick={handleResetGame} 
-          variant="destructive"
-          className="font-bold"
-        >
-          <RotateCcw className="mr-2 h-4 w-4" /> إعادة
-        </Button>
+    activeLiveChatId = await (async (id) => {
+      try {
+        const r = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${id}&key=${YT_API_KEY}`);
+        const d = await r.json();
+        return d.items?.[0]?.liveStreamingDetails?.activeLiveChatId || null;
+      } catch { return null; }
+    })(videoIdMatch[1]);
 
-        <div className="flex items-center gap-2 px-4 text-white font-mono border-r border-white/20">
-          <Users size={16} />
-          <span>{activePlayers.length}</span>
-        </div>
-      </div>
+    if (activeLiveChatId) {
+      if (pollingInterval) clearInterval(pollingInterval);
+      // ذكاء: التحديث كل 4 ثوانٍ لتوفير الكوتا وضمان السرعة
+      pollingInterval = setInterval(pollChat, 4000);
+      res.json({ success: true });
+    } else {
+      res.status(400).json({ message: "البث غير مباشر أو الشات مغلق" });
+    }
+  });
 
-      {/* منطقة اللعب */}
-      <div className="relative flex items-center justify-center py-20 mt-10">
+  app.post("/api/game/start-bomb", async (req, res) => {
+    const users = await storage.getUsers();
+    const active = users.filter(u => u.lobbyStatus === "active");
+    if (active.length < 2) return res.status(400).json({ message: "تحتاج لاعبين اثنين على الأقل" });
 
-        {/* حالة الانتظار إذا لم يوجد لاعبين */}
-        {activePlayers.length === 0 && (
-          <div className="absolute text-center z-10">
-             <div className="animate-pulse text-white/50 text-xl font-bold">بانتظار انضمام اللاعبين...</div>
-             <p className="text-sm text-white/30 mt-2">اكتب "دخول" في شات اليوتيوب</p>
-          </div>
-        )}
+    gameActive = true;
+    const randomPlayer = active[Math.floor(Math.random() * active.length)];
+    currentBombHolderId = randomPlayer.id;
+    io.emit("bomb_started", { playerId: randomPlayer.id });
+    res.json({ success: true });
+  });
 
-        {/* الخلفية الدائرية */}
-        <div 
-          className="absolute rounded-full border-4 border-dashed border-white/10 animate-[spin_60s_linear_infinite]"
-          style={{ width: radius * 2.5, height: radius * 2.5 }}
-        />
+  app.post("/api/game/eliminate", async (req, res) => {
+    const { playerId } = req.body;
+    await storage.updateUserStatus(playerId, "eliminated");
+    io.emit("player_eliminated", { playerId });
 
-        {/* حاوية اللاعبين */}
-        <div 
-          className="relative transition-all duration-1000 ease-out"
-          style={{ width: radius * 2, height: radius * 2 }}
-        >
-          {activePlayers.map((user, index) => {
-            const total = activePlayers.length;
-            const angle = (index / total) * 2 * Math.PI - Math.PI / 2;
-            const x = Math.cos(angle) * radius;
-            const y = Math.sin(angle) * radius;
+    // فحص الفوز فوراً بعد الاستبعاد
+    const won = await checkWinner();
+    if (!won && playerId === currentBombHolderId) {
+      // نقل القنبلة لشخص آخر إذا كان المستبعد هو حاملها
+      const active = (await storage.getUsers()).filter(u => u.lobbyStatus === "active");
+      const next = active[Math.floor(Math.random() * active.length)];
+      currentBombHolderId = next.id;
+      io.emit("bomb_started", { playerId: next.id });
+    }
+    res.json({ success: true });
+  });
 
-            const isHoldingBomb = bombPlayerId === user.id;
-            const isExploding = explodingId === user.id;
+  app.post("/api/game/reset", async (req, res) => {
+    await storage.resetAllUsersStatus();
+    currentBombHolderId = null;
+    gameActive = false;
+    io.emit("game_reset");
+    res.json({ success: true });
+  });
 
-            return (
-              <div
-                key={user.id}
-                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-500
-                  ${isExploding ? "scale-150 z-50" : "hover:scale-110 z-10"}
-                `}
-                style={{ 
-                  transform: `translate(${x}px, ${y}px) translate(-50%, -50%)`,
-                }}
-              >
-                <div className="flex flex-col items-center gap-2 relative">
+  app.get(api.users.list.path, async (req, res) => {
+    const users = await storage.getUsers();
+    res.json(users.sort((a, b) => a.id - b.id));
+  });
 
-                  {/* Avatar Circle */}
-                  <div className={`relative w-20 h-20 rounded-full border-4 shadow-2xl overflow-visible transition-all duration-300
-                    ${isHoldingBomb ? "border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.6)] animate-pulse" : "border-white/20 bg-black"}
-                  `}>
-                     {/* Badge ID */}
-                     <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-50">
-                        <span className="bg-cyan-400 text-black font-black text-lg px-2 py-0.5 rounded-md shadow-[0_0_10px_rgba(34,211,238,0.8)] border border-white">
-                          #{user.id}
-                        </span>
-                     </div>
-
-                    <div className="w-full h-full rounded-full overflow-hidden">
-                      {user.avatarUrl ? (
-                        <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gray-800 text-white">
-                           <span className="font-bold text-2xl">{user.username.charAt(0)}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {isHoldingBomb && (
-                      <div className="absolute -top-8 -right-8 z-50 animate-bounce">
-                        <Bomb size={48} className="text-red-500 fill-red-600 drop-shadow-2xl" />
-                      </div>
-                    )}
-
-                    {isExploding && (
-                      <div className="absolute inset-0 -m-10 flex items-center justify-center z-50 pointer-events-none">
-                         <Skull size={80} className="text-white animate-ping absolute" />
-                         <div className="w-40 h-40 bg-orange-500 rounded-full animate-ping opacity-75"></div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Name Tag */}
-                  <div className="bg-black/80 backdrop-blur-md px-3 py-1 rounded-lg border border-white/20 max-w-[140px]">
-                    <p className="text-white font-bold text-sm truncate text-center dir-rtl">
-                      {user.username}
-                    </p>
-                  </div>
-
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
+  return httpServer;
 }
+export const GameCircle = () =>
