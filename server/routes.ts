@@ -2,6 +2,8 @@ import { z } from "zod";
 import { Server } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import { Express } from "express";
+import { storage } from "./storage";
+import { api } from "@shared/routes";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -11,6 +13,7 @@ export async function registerRoutes(
     path: "/socket.io",
     cors: {
       origin: "*",
+      methods: ["GET", "POST"]
     },
   });
 
@@ -19,13 +22,13 @@ export async function registerRoutes(
   let pollingInterval: NodeJS.Timeout | null = null;
   let lastMessageTime: string | null = null;
   let currentBombHolderId: number | null = null;
-  let nextPageToken: string | null = null; // إضافة للتمرير الذكي
+  let nextPageToken: string | null = null; // للتمرير الذكي - منع ضياع الرسائل
   let messageCache = new Set<string>(); // لمنع التكرار
   let reconnectAttempts = 0;
   const MAX_RECONNECT_ATTEMPTS = 5;
   let isPolling = false; // منع التداخل في الطلبات
 
-  // دالة ذكية للحصول على liveChatId مع إعادة المحاولة
+  // دالة ذكية للحصول على liveChatId مع إعادة المحاولة التلقائية
   async function getLiveChatId(videoId: string, retries = 3): Promise<string | null> {
     console.log(`🔍 محاولة الحصول على liveChatId للفيديو: ${videoId} (محاولة ${4 - retries}/3)`);
 
@@ -48,7 +51,7 @@ export async function registerRoutes(
 
         if (chatId) {
           console.log(`✅ تم العثور على liveChatId بنجاح`);
-          reconnectAttempts = 0; // إعادة تعيين عداد المحاولات
+          reconnectAttempts = 0;
           return chatId;
         }
 
@@ -68,7 +71,7 @@ export async function registerRoutes(
     return null;
   }
 
-  // دالة محسّنة لجلب الرسائل مع دعم التمرير pageToken
+  // دالة محسّنة لجلب الرسائل مع دعم nextPageToken
   async function pollChat() {
     if (!activeLiveChatId || !YT_API_KEY) {
       console.warn(`⚠️ تخطي الاستطلاع: activeLiveChatId=${activeLiveChatId}, hasAPIKey=${!!YT_API_KEY}`);
@@ -89,26 +92,32 @@ export async function registerRoutes(
 
       if (nextPageToken) {
         url += `&pageToken=${nextPageToken}`;
-        console.log(`📄 استخدام pageToken للتمرير: ${nextPageToken.substring(0, 20)}...`);
+        console.log(`📄 استخدام pageToken للتمرير`);
       }
 
       console.log(`🔄 استطلاع الدردشة...`);
       const res = await fetch(url);
 
-      // معالجة أخطاء API بذكاء
+      // معالجة خطأ 403 (Quota limit) مع إعادة محاولة تلقائية
       if (res.status === 403) {
         const errorData = await res.json().catch(() => ({}));
-        console.error("❌ خطأ 403 في YouTube API:", JSON.stringify(errorData));
+        console.error("❌ خطأ 403 (Quota Limit):", JSON.stringify(errorData));
 
-        // محاولة إعادة الاتصال
+        // محاولة إعادة الاتصال تلقائياً
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttempts++;
-          console.log(`🔄 محاولة إعادة الاتصال ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`);
+          const waitTime = 5000 * reconnectAttempts; // زيادة تدريجية في الانتظار
+          console.log(`🔄 محاولة إعادة الاتصال ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} بعد ${waitTime/1000}s...`);
+
           setTimeout(() => {
             nextPageToken = null;
             messageCache.clear();
-          }, 5000 * reconnectAttempts);
+            isPolling = false; // السماح بمحاولة جديدة
+          }, waitTime);
+        } else {
+          console.error("❌ تم الوصول للحد الأقصى من محاولات إعادة الاتصال");
         }
+
         isPolling = false;
         return;
       }
@@ -123,124 +132,159 @@ export async function registerRoutes(
       const data = await res.json();
       const messages = data.items || [];
 
-      // تحديث pageToken للدورة القادمة (الحل الأساسي لمشكلة التمرير)
+      // تحديث pageToken للدورة القادمة - منع ضياع الرسائل
       if (data.nextPageToken) {
         nextPageToken = data.nextPageToken;
         console.log(`✅ تم تحديث pageToken للتمرير التالي`);
       }
-
-      // حفظ pollingIntervalMillis المقترح من YouTube
-      const pollingInterval = data.pollingIntervalMillis || 15000;
 
       console.log(`📨 تم استقبال ${messages.length} رسالة`);
 
       let newMessagesCount = 0;
 
       for (const msg of messages) {
-        const text = msg.snippet.displayMessage;
-        const publishTime = msg.snippet.publishedAt;
-        const messageId = msg.id;
+        try {
+          const text = msg.snippet?.displayMessage || "";
+          const publishTime = msg.snippet?.publishedAt;
+          const messageId = msg.id;
 
-        // تخطي الرسائل المكررة باستخدام messageId
-        if (messageCache.has(messageId)) {
-          continue;
-        }
-
-        // تخطي الرسائل القديمة
-        if (lastMessageTime && publishTime <= lastMessageTime) {
-          continue;
-        }
-
-        messageCache.add(messageId);
-        newMessagesCount++;
-
-        // تنظيف الذاكرة المؤقتة إذا أصبحت كبيرة جداً
-        if (messageCache.size > 1000) {
-          const oldestMessages = Array.from(messageCache).slice(0, 500);
-          oldestMessages.forEach(id => messageCache.delete(id));
-        }
-
-        const cleanText = text.trim();
-        console.log(`💬 [${msg.authorDetails.displayName}]: "${cleanText}"`);
-
-        // مطابقة ذكية لأوامر الانضمام - دعم أوسع
-        const lowerText = cleanText.toLowerCase();
-        const normalizedText = cleanText
-          .replace(/\s+/g, '') // إزالة المسافات
-          .replace(/[!！｜]/g, '!'); // توحيد علامات التعجب
-
-        const joinPatterns = [
-          /^!+دخول$/i,
-          /^دخول!+$/i,
-          /^!+join$/i,
-          /^join!+$/i,
-          /دخول/i,
-          /join/i,
-        ];
-
-        const isJoinCommand = joinPatterns.some(pattern => 
-          pattern.test(normalizedText) || pattern.test(lowerText)
-        );
-
-        if (isJoinCommand) {
-          const author = msg.authorDetails;
-          const username = author.displayName;
-          const avatarUrl = author.profileImageUrl;
-          const externalId = author.channelId;
-
-          const existing = await storage.getUserByUsername(username);
-          if (!existing) {
-            const user = await storage.createUser({
-              username,
-              avatarUrl,
-              externalId,
-              lobbyStatus: "active"
-            });
-            io.emit("new_player", user);
-            console.log(`✅ [لاعب جديد]: ${username}`);
-          } else if (existing.lobbyStatus !== "active") {
-            await storage.updateUserStatus(existing.id, "active");
-            io.emit("new_player", { ...existing, lobbyStatus: "active" });
-            console.log(`🔄 [إعادة تفعيل لاعب]: ${username}`);
-          } else {
-            console.log(`ℹ️ [لاعب موجود بالفعل]: ${username}`);
+          // تخطي الرسائل غير الصالحة
+          if (!text || !publishTime || !messageId) {
+            continue;
           }
-        }
 
-        // منطق تمرير القنبلة - محسّن وأكثر أماناً
-        if (currentBombHolderId) {
+          // تخطي الرسائل المكررة باستخدام messageId
+          if (messageCache.has(messageId)) {
+            continue;
+          }
+
+          // تخطي الرسائل القديمة
+          if (lastMessageTime && publishTime <= lastMessageTime) {
+            continue;
+          }
+
+          messageCache.add(messageId);
+          newMessagesCount++;
+
+          // تنظيف الذاكرة المؤقتة تلقائياً
+          if (messageCache.size > 1000) {
+            const oldestMessages = Array.from(messageCache).slice(0, 500);
+            oldestMessages.forEach(id => messageCache.delete(id));
+            console.log(`🗑️ تم تنظيف ${oldestMessages.length} رسالة قديمة من الذاكرة`);
+          }
+
+          const cleanText = text.trim();
           const author = msg.authorDetails;
-          const senderName = author.displayName;
-          const sender = await storage.getUserByUsername(senderName);
+          console.log(`💬 [${author?.displayName || 'Unknown'}]: "${cleanText}"`);
 
-          if (sender && sender.id === currentBombHolderId) {
-            // استخراج الرقم من الرسالة بذكاء
-            const numberMatch = cleanText.match(/\d+/);
-            if (numberMatch) {
-              const targetId = parseInt(numberMatch[0]);
+          // مطابقة ذكية لأوامر الانضمام - دعم متعدد الصيغ
+          const lowerText = cleanText.toLowerCase();
+          const normalizedText = cleanText
+            .replace(/\s+/g, '') // إزالة جميع المسافات
+            .replace(/[!！｜]/g, '!'); // توحيد علامات التعجب
 
-              if (!isNaN(targetId) && targetId !== currentBombHolderId) {
-                const targetUser = await storage.getUser(targetId);
-                if (targetUser && targetUser.lobbyStatus === "active") {
-                  currentBombHolderId = targetId;
-                  io.emit("bomb_started", { playerId: targetId });
-                  console.log(`💣 [تمرير القنبلة]: ${sender.username} (${sender.id}) → اللاعب ${targetId}`);
-                } else {
-                  console.warn(`⚠️ اللاعب ${targetId} غير نشط أو غير موجود`);
-                }
+          const joinPatterns = [
+            /^!+دخول$/i,
+            /^دخول!+$/i,
+            /^!+join$/i,
+            /^join!+$/i,
+            /دخول/i,
+            /join/i,
+          ];
+
+          const isJoinCommand = joinPatterns.some(pattern => 
+            pattern.test(normalizedText) || pattern.test(lowerText)
+          );
+
+          // معالجة أمر الانضمام
+          if (isJoinCommand) {
+            const username = author?.displayName;
+            const avatarUrl = author?.profileImageUrl;
+            const externalId = author?.channelId;
+
+            if (!username || !externalId) {
+              console.warn("⚠️ معلومات المستخدم غير كاملة");
+              continue;
+            }
+
+            try {
+              const existing = await storage.getUserByUsername(username);
+              if (!existing) {
+                const user = await storage.createUser({
+                  username,
+                  avatarUrl: avatarUrl || "",
+                  externalId,
+                  lobbyStatus: "active"
+                });
+
+                // إرسال إشعار للعملاء عبر Socket.IO
+                io.emit("new_player", user);
+                console.log(`✅ [لاعب جديد]: ${username} (ID: ${user.id})`);
+              } else if (existing.lobbyStatus !== "active") {
+                await storage.updateUserStatus(existing.id, "active");
+                io.emit("new_player", { ...existing, lobbyStatus: "active" });
+                console.log(`🔄 [إعادة تفعيل لاعب]: ${username} (ID: ${existing.id})`);
+              } else {
+                console.log(`ℹ️ [لاعب موجود بالفعل]: ${username} (ID: ${existing.id})`);
               }
+            } catch (storageError) {
+              console.error("❌ خطأ في إضافة اللاعب:", storageError);
             }
           }
-        }
 
-        lastMessageTime = publishTime;
+          // منطق تمرير القنبلة - استخدام RegExp لاستخراج الأرقام
+          if (currentBombHolderId) {
+            const senderName = author?.displayName;
+
+            if (!senderName) continue;
+
+            try {
+              const sender = await storage.getUserByUsername(senderName);
+
+              // التحقق من أن المرسل هو حامل القنبلة
+              if (sender && sender.id === currentBombHolderId) {
+                // استخراج الرقم من الرسالة باستخدام RegExp - يعمل حتى مع نص إضافي
+                const numberMatch = cleanText.match(/\d+/);
+
+                if (numberMatch) {
+                  const targetId = parseInt(numberMatch[0]);
+
+                  // التحقق من صحة الرقم
+                  if (!isNaN(targetId) && targetId !== currentBombHolderId) {
+                    const targetUser = await storage.getUser(targetId);
+
+                    if (targetUser && targetUser.lobbyStatus === "active") {
+                      // تمرير القنبلة
+                      currentBombHolderId = targetId;
+                      io.emit("bomb_started", { playerId: targetId });
+                      console.log(`💣 [تمرير القنبلة]: ${sender.username} (${sender.id}) → ${targetUser.username} (${targetId})`);
+                    } else {
+                      console.warn(`⚠️ اللاعب ${targetId} غير نشط أو غير موجود`);
+                      // يمكن إرسال رسالة خطأ للاعب
+                      io.emit("bomb_transfer_failed", { 
+                        reason: "player_not_active",
+                        targetId 
+                      });
+                    }
+                  }
+                }
+              }
+            } catch (bombError) {
+              console.error("❌ خطأ في تمرير القنبلة:", bombError);
+            }
+          }
+
+          lastMessageTime = publishTime;
+        } catch (msgError) {
+          console.error("❌ خطأ في معالجة الرسالة:", msgError);
+        }
       }
 
       if (newMessagesCount > 0) {
         console.log(`✅ تمت معالجة ${newMessagesCount} رسالة جديدة`);
       }
 
-      // إعادة تعيين عداد محاولات الاتصال عند النجاح
+      // إعادة تعيين عداد المحاولات عند النجاح
       reconnectAttempts = 0;
 
     } catch (e) {
@@ -256,10 +300,17 @@ export async function registerRoutes(
     }
   }
 
-  // نقطة نهاية المزامنة المحسّنة
+  // ==================== Routes ====================
+
+  // نقطة نهاية المزامنة
   app.post("/api/sync", async (req, res) => {
     try {
       const { url } = req.body;
+
+      if (!url || typeof url !== "string") {
+        return res.status(400).json({ message: "رابط غير صالح" });
+      }
+
       const videoIdMatch = url.match(/(?:v=|\/live\/|\/embed\/|youtu\.be\/)([^?&]+)/);
       if (!videoIdMatch) {
         return res.status(400).json({ message: "رابط YouTube غير صالح" });
@@ -268,7 +319,6 @@ export async function registerRoutes(
 
       console.log(`🎥 محاولة المزامنة مع الفيديو: ${videoId}`);
 
-      // الحصول على البيانات الوصفية
       let thumbnail = "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&q=80&w=1000";
       let title = "البث المباشر";
 
@@ -280,10 +330,10 @@ export async function registerRoutes(
         const video = metaData.items?.[0];
 
         if (video) {
-          const thumbnails = video.snippet.thumbnails;
-          thumbnail = thumbnails.maxres?.url || thumbnails.high?.url || thumbnails.medium?.url || thumbnails.default?.url;
-          title = video.snippet.title;
-          activeLiveChatId = video.liveStreamingDetails?.activeLiveChatId;
+          const thumbnails = video.snippet?.thumbnails;
+          thumbnail = thumbnails?.maxres?.url || thumbnails?.high?.url || thumbnails?.medium?.url || thumbnails?.default?.url || thumbnail;
+          title = video.snippet?.title || title;
+          activeLiveChatId = video.liveStreamingDetails?.activeLiveChatId || null;
         } else {
           thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
         }
@@ -292,7 +342,6 @@ export async function registerRoutes(
         thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
       }
 
-      // إذا لم نحصل على activeLiveChatId، محاولة الحصول عليه بذكاء
       if (!activeLiveChatId) {
         console.log("🔍 لم يتم العثور على activeLiveChatId، محاولة الحصول عليه...");
         activeLiveChatId = await getLiveChatId(videoId);
@@ -310,20 +359,22 @@ export async function registerRoutes(
       messageCache.clear();
       lastMessageTime = null;
       reconnectAttempts = 0;
+      isPolling = false;
 
       if (activeLiveChatId) {
         console.log(`✅ بدء استطلاع الدردشة لـ: ${activeLiveChatId}`);
-        // بدء الاستطلاع الفوري ثم كل 10 ثواني
-        pollChat();
-        pollingInterval = setInterval(pollChat, 10000);
+        pollChat(); // استطلاع فوري
+        pollingInterval = setInterval(pollChat, 10000); // ثم كل 10 ثواني
+
+        res.json({ thumbnail, title, success: true });
       } else {
         console.error("❌ لا يوجد activeLiveChatId متاح لبدء الاستطلاع");
-        return res.status(400).json({ 
-          message: "لا يمكن العثور على دردشة مباشرة نشطة لهذا الفيديو" 
+        res.status(400).json({ 
+          message: "لا يمكن العثور على دردشة مباشرة نشطة لهذا الفيديو",
+          thumbnail,
+          title
         });
       }
-
-      res.json({ thumbnail, title, success: true });
     } catch (e) {
       console.error("❌ فشلت عملية المزامنة:", e);
       res.status(500).json({ message: "فشلت عملية المزامنة" });
@@ -351,8 +402,8 @@ export async function registerRoutes(
 
       if (video) {
         res.json({
-          thumbnail: video.snippet.thumbnails.high.url,
-          title: video.snippet.title
+          thumbnail: video.snippet?.thumbnails?.high?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+          title: video.snippet?.title || "البث المباشر"
         });
       } else {
         res.status(404).json({ message: "لم يتم العثور على الفيديو" });
@@ -363,8 +414,8 @@ export async function registerRoutes(
     }
   });
 
-  // نقطة نهاية قائمة المستخدمين
-  app.get("/api/users/list", async (req, res) => {
+  // نقطة نهاية قائمة المستخدمين - استخدام api.users.list.path
+  app.get(api.users.list.path, async (req, res) => {
     try {
       const users = await storage.getUsers();
       res.json(users);
@@ -473,7 +524,7 @@ export async function registerRoutes(
     }
   });
 
-  // نقطة نهاية حالة النظام (ميزة جديدة)
+  // نقطة نهاية حالة النظام
   app.get("/api/system/status", (req, res) => {
     res.json({
       activeLiveChatId,
@@ -486,6 +537,15 @@ export async function registerRoutes(
     });
   });
 
+  // معالجة اتصالات Socket.IO
+  io.on("connection", (socket) => {
+    console.log(`🔌 اتصال جديد: ${socket.id}`);
+
+    socket.on("disconnect", () => {
+      console.log(`❌ انقطاع الاتصال: ${socket.id}`);
+    });
+  });
+
   // تنظيف عند إغلاق الخادم
   httpServer.on('close', () => {
     if (pollingInterval) {
@@ -495,5 +555,7 @@ export async function registerRoutes(
   });
 
   console.log("✅ تم تهيئة جميع المسارات بنجاح");
+  console.log(`📋 مسار قائمة اللاعبين: ${api.users.list.path}`);
+
   return httpServer;
 }
