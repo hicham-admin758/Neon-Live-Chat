@@ -22,11 +22,11 @@ export async function registerRoutes(
   let pollingInterval: NodeJS.Timeout | null = null;
   let lastMessageTime: string | null = null;
   let currentBombHolderId: number | null = null;
-  let nextPageToken: string | null = null; // للتمرير الذكي - منع ضياع الرسائل
-  let messageCache = new Set<string>(); // لمنع التكرار
+  let nextPageToken: string | null = null;
+  let messageCache = new Set<string>();
   let reconnectAttempts = 0;
   const MAX_RECONNECT_ATTEMPTS = 5;
-  let isPolling = false; // منع التداخل في الطلبات
+  let isPolling = false;
 
   // دالة ذكية للحصول على liveChatId مع إعادة المحاولة التلقائية
   async function getLiveChatId(videoId: string, retries = 3): Promise<string | null> {
@@ -78,7 +78,6 @@ export async function registerRoutes(
       return;
     }
 
-    // منع التداخل في الطلبات
     if (isPolling) {
       console.log(`⏳ استطلاع جاري بالفعل، التخطي...`);
       return;
@@ -87,7 +86,6 @@ export async function registerRoutes(
     isPolling = true;
 
     try {
-      // بناء URL مع pageToken للتمرير الذكي
       let url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${activeLiveChatId}&part=snippet,authorDetails&maxResults=200&key=${YT_API_KEY}`;
 
       if (nextPageToken) {
@@ -98,21 +96,19 @@ export async function registerRoutes(
       console.log(`🔄 استطلاع الدردشة...`);
       const res = await fetch(url);
 
-      // معالجة خطأ 403 (Quota limit) مع إعادة محاولة تلقائية
       if (res.status === 403) {
         const errorData = await res.json().catch(() => ({}));
         console.error("❌ خطأ 403 (Quota Limit):", JSON.stringify(errorData));
 
-        // محاولة إعادة الاتصال تلقائياً
         if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttempts++;
-          const waitTime = 5000 * reconnectAttempts; // زيادة تدريجية في الانتظار
+          const waitTime = 5000 * reconnectAttempts;
           console.log(`🔄 محاولة إعادة الاتصال ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} بعد ${waitTime/1000}s...`);
 
           setTimeout(() => {
             nextPageToken = null;
             messageCache.clear();
-            isPolling = false; // السماح بمحاولة جديدة
+            isPolling = false;
           }, waitTime);
         } else {
           console.error("❌ تم الوصول للحد الأقصى من محاولات إعادة الاتصال");
@@ -132,7 +128,6 @@ export async function registerRoutes(
       const data = await res.json();
       const messages = data.items || [];
 
-      // تحديث pageToken للدورة القادمة - منع ضياع الرسائل
       if (data.nextPageToken) {
         nextPageToken = data.nextPageToken;
         console.log(`✅ تم تحديث pageToken للتمرير التالي`);
@@ -148,17 +143,14 @@ export async function registerRoutes(
           const publishTime = msg.snippet?.publishedAt;
           const messageId = msg.id;
 
-          // تخطي الرسائل غير الصالحة
           if (!text || !publishTime || !messageId) {
             continue;
           }
 
-          // تخطي الرسائل المكررة باستخدام messageId
           if (messageCache.has(messageId)) {
             continue;
           }
 
-          // تخطي الرسائل القديمة
           if (lastMessageTime && publishTime <= lastMessageTime) {
             continue;
           }
@@ -166,7 +158,6 @@ export async function registerRoutes(
           messageCache.add(messageId);
           newMessagesCount++;
 
-          // تنظيف الذاكرة المؤقتة تلقائياً
           if (messageCache.size > 1000) {
             const oldestMessages = Array.from(messageCache).slice(0, 500);
             oldestMessages.forEach(id => messageCache.delete(id));
@@ -177,11 +168,10 @@ export async function registerRoutes(
           const author = msg.authorDetails;
           console.log(`💬 [${author?.displayName || 'Unknown'}]: "${cleanText}"`);
 
-          // مطابقة ذكية لأوامر الانضمام - دعم متعدد الصيغ
           const lowerText = cleanText.toLowerCase();
           const normalizedText = cleanText
-            .replace(/\s+/g, '') // إزالة جميع المسافات
-            .replace(/[!！｜]/g, '!'); // توحيد علامات التعجب
+            .replace(/\s+/g, '')
+            .replace(/[!！｜]/g, '!');
 
           const joinPatterns = [
             /^!+دخول$/i,
@@ -196,7 +186,6 @@ export async function registerRoutes(
             pattern.test(normalizedText) || pattern.test(lowerText)
           );
 
-          // معالجة أمر الانضمام
           if (isJoinCommand) {
             const username = author?.displayName;
             const avatarUrl = author?.profileImageUrl;
@@ -217,7 +206,6 @@ export async function registerRoutes(
                   lobbyStatus: "active"
                 });
 
-                // إرسال إشعار للعملاء عبر Socket.IO
                 io.emit("new_player", user);
                 console.log(`✅ [لاعب جديد]: ${username} (ID: ${user.id})`);
               } else if (existing.lobbyStatus !== "active") {
@@ -232,7 +220,7 @@ export async function registerRoutes(
             }
           }
 
-          // منطق تمرير القنبلة - استخدام RegExp لاستخراج الأرقام
+          // منطق تمرير القنبلة - استخدام Display ID (رقم الترتيب)
           if (currentBombHolderId) {
             const senderName = author?.displayName;
 
@@ -243,29 +231,57 @@ export async function registerRoutes(
 
               // التحقق من أن المرسل هو حامل القنبلة
               if (sender && sender.id === currentBombHolderId) {
-                // استخراج الرقم من الرسالة باستخدام RegExp - يعمل حتى مع نص إضافي
+                // جلب قائمة اللاعبين النشطين فقط
+                const allUsers = await storage.getUsers();
+                const activePlayers = allUsers.filter(u => u.lobbyStatus === "active");
+
+                // إنشاء خريطة Display ID → User
+                // Display ID يبدأ من 1 ويزيد تدريجياً
+                const displayIdMap = new Map<number, typeof activePlayers[0]>();
+                activePlayers.forEach((player, index) => {
+                  const displayId = index + 1; // الترتيب يبدأ من 1
+                  displayIdMap.set(displayId, player);
+                });
+
+                // استخراج الرقم من الرسالة باستخدام RegExp
                 const numberMatch = cleanText.match(/\d+/);
 
                 if (numberMatch) {
-                  const targetId = parseInt(numberMatch[0]);
+                  const targetDisplayId = parseInt(numberMatch[0]);
 
                   // التحقق من صحة الرقم
-                  if (!isNaN(targetId) && targetId !== currentBombHolderId) {
-                    const targetUser = await storage.getUser(targetId);
+                  if (!isNaN(targetDisplayId) && targetDisplayId >= 1) {
+                    // البحث عن اللاعب باستخدام Display ID
+                    const targetUser = displayIdMap.get(targetDisplayId);
 
-                    if (targetUser && targetUser.lobbyStatus === "active") {
-                      // تمرير القنبلة
-                      currentBombHolderId = targetId;
-                      io.emit("bomb_started", { playerId: targetId });
-                      console.log(`💣 [تمرير القنبلة]: ${sender.username} (${sender.id}) → ${targetUser.username} (${targetId})`);
+                    if (targetUser) {
+                      // التحقق من أن اللاعب المستهدف ليس نفس حامل القنبلة
+                      if (targetUser.id !== currentBombHolderId) {
+                        // تمرير القنبلة
+                        currentBombHolderId = targetUser.id;
+                        io.emit("bomb_started", { playerId: targetUser.id });
+
+                        console.log(`💣 [تمرير القنبلة]: ${sender.username} → ${targetUser.username}`);
+                        console.log(`   Display ID: #${targetDisplayId} → Database ID: ${targetUser.id}`);
+                      } else {
+                        console.warn(`⚠️ اللاعب حاول تمرير القنبلة لنفسه`);
+                        io.emit("bomb_transfer_failed", { 
+                          reason: "cannot_transfer_to_self",
+                          displayId: targetDisplayId 
+                        });
+                      }
                     } else {
-                      console.warn(`⚠️ اللاعب ${targetId} غير نشط أو غير موجود`);
-                      // يمكن إرسال رسالة خطأ للاعب
+                      console.warn(`⚠️ رقم الترتيب ${targetDisplayId} غير موجود`);
+                      console.log(`   اللاعبون النشطون: ${activePlayers.length} لاعب (1-${activePlayers.length})`);
+
                       io.emit("bomb_transfer_failed", { 
-                        reason: "player_not_active",
-                        targetId 
+                        reason: "player_not_found",
+                        displayId: targetDisplayId,
+                        maxPlayers: activePlayers.length
                       });
                     }
+                  } else {
+                    console.warn(`⚠️ رقم غير صالح: ${targetDisplayId}`);
                   }
                 }
               }
@@ -284,13 +300,11 @@ export async function registerRoutes(
         console.log(`✅ تمت معالجة ${newMessagesCount} رسالة جديدة`);
       }
 
-      // إعادة تعيين عداد المحاولات عند النجاح
       reconnectAttempts = 0;
 
     } catch (e) {
       console.error("❌ خطأ في استطلاع الدردشة:", e);
 
-      // محاولة إعادة الاتصال
       if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts++;
         console.log(`🔄 إعادة المحاولة ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}`);
@@ -302,7 +316,6 @@ export async function registerRoutes(
 
   // ==================== Routes ====================
 
-  // نقطة نهاية المزامنة
   app.post("/api/sync", async (req, res) => {
     try {
       const { url } = req.body;
@@ -347,14 +360,12 @@ export async function registerRoutes(
         activeLiveChatId = await getLiveChatId(videoId);
       }
 
-      // إيقاف الاستطلاع السابق
       if (pollingInterval) {
         clearInterval(pollingInterval);
         pollingInterval = null;
         console.log("⏹️ تم إيقاف الاستطلاع السابق");
       }
 
-      // إعادة تعيين حالة التمرير
       nextPageToken = null;
       messageCache.clear();
       lastMessageTime = null;
@@ -363,8 +374,8 @@ export async function registerRoutes(
 
       if (activeLiveChatId) {
         console.log(`✅ بدء استطلاع الدردشة لـ: ${activeLiveChatId}`);
-        pollChat(); // استطلاع فوري
-        pollingInterval = setInterval(pollChat, 10000); // ثم كل 10 ثواني
+        pollChat();
+        pollingInterval = setInterval(pollChat, 10000);
 
         res.json({ thumbnail, title, success: true });
       } else {
@@ -381,7 +392,6 @@ export async function registerRoutes(
     }
   });
 
-  // نقطة نهاية البيانات الوصفية للبث
   app.get("/api/stream-meta", async (req, res) => {
     const { url } = req.query;
     if (typeof url !== "string") {
@@ -414,7 +424,6 @@ export async function registerRoutes(
     }
   });
 
-  // نقطة نهاية قائمة المستخدمين - استخدام api.users.list.path
   app.get(api.users.list.path, async (req, res) => {
     try {
       const users = await storage.getUsers();
@@ -425,7 +434,6 @@ export async function registerRoutes(
     }
   });
 
-  // بدء لعبة القنبلة
   app.post("/api/game/start-bomb", async (req, res) => {
     try {
       const users = await storage.getUsers();
@@ -456,7 +464,6 @@ export async function registerRoutes(
     }
   });
 
-  // إقصاء لاعب
   app.post("/api/game/eliminate", async (req, res) => {
     try {
       const { playerId } = req.body;
@@ -494,7 +501,6 @@ export async function registerRoutes(
     }
   });
 
-  // إعادة تعيين اللعبة
   app.post("/api/game/reset", async (req, res) => {
     try {
       await storage.resetAllUsersStatus();
@@ -508,7 +514,6 @@ export async function registerRoutes(
     }
   });
 
-  // حذف جميع المشاركين
   app.post("/api/game/clear-participants", async (req, res) => {
     try {
       await storage.deleteAllUsers();
@@ -524,7 +529,6 @@ export async function registerRoutes(
     }
   });
 
-  // نقطة نهاية حالة النظام
   app.get("/api/system/status", (req, res) => {
     res.json({
       activeLiveChatId,
@@ -537,7 +541,6 @@ export async function registerRoutes(
     });
   });
 
-  // معالجة اتصالات Socket.IO
   io.on("connection", (socket) => {
     console.log(`🔌 اتصال جديد: ${socket.id}`);
 
@@ -546,7 +549,6 @@ export async function registerRoutes(
     });
   });
 
-  // تنظيف عند إغلاق الخادم
   httpServer.on('close', () => {
     if (pollingInterval) {
       clearInterval(pollingInterval);
