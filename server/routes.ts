@@ -79,7 +79,7 @@ export async function registerRoutes(
         console.log(`💬 ${author.displayName}: ${text}`);
 
         // 1️⃣ منطق الانضمام (Join Logic)
-        const isJoinCommand = /!?(دخول|join|انضمام)/i.test(text);
+        const isJoinCommand = text.includes("!دخول") || /!?(دخول|join|انضمام)/i.test(text);
         if (isJoinCommand) {
            const existing = await storage.getUserByUsername(author.displayName);
            if (!existing) {
@@ -90,9 +90,11 @@ export async function registerRoutes(
                lobbyStatus: "active"
              });
              io.emit("new_player", user);
+             console.log(`✅ لاعب جديد انضم: ${author.displayName}`);
            } else if (existing.lobbyStatus !== "active") {
              await storage.updateUserStatus(existing.id, "active");
              io.emit("new_player", { ...existing, lobbyStatus: "active" });
+             console.log(`✅ لاعب عاد للمشاركة: ${author.displayName}`);
            }
         }
 
