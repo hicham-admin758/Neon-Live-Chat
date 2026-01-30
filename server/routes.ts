@@ -113,9 +113,9 @@ export async function registerRoutes(
 
               // التحقق من أن الهدف موجود ونشيط
               const allUsers = await storage.getUsers();
-              const targetUser = allUsers.find(u => u.id === targetId && u.lobbyStatus === "active");
+              const targetUser = allUsers.find(u => u.id === targetId);
 
-              if (targetUser) {
+              if (targetUser && targetUser.lobbyStatus === "active") {
                 if (targetUser.id !== currentBombHolderId) {
                   // ✅ نجاح التمرير
                   currentBombHolderId = targetUser.id;
