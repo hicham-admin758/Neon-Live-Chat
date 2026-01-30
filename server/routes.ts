@@ -204,26 +204,21 @@ export async function registerRoutes(
   let bombTimer: NodeJS.Timeout | null = null;
   let bombRemainingSeconds = 30;
 
-  app.post("/api/game/start-bomb", async (req, res) => {
-    const users = await storage.getUsers();
-    const activePlayers = users.filter(u => u.lobbyStatus === "active");
-
-    if (activePlayers.length < 2) return res.status(400).json({ message: "عدد اللاعبين غير كاف" });
-
-    const randomPlayer = activePlayers[Math.floor(Math.random() * activePlayers.length)];
-    currentBombHolderId = randomPlayer.id;
-    bombRemainingSeconds = 30;
-
+  function startBombTimer() {
     if (bombTimer) clearInterval(bombTimer);
+    bombRemainingSeconds = 30;
+    io.emit("bomb_started", { playerId: currentBombHolderId, seconds: bombRemainingSeconds });
+
     bombTimer = setInterval(async () => {
       bombRemainingSeconds--;
       io.emit("bomb_tick", { seconds: bombRemainingSeconds });
 
       if (bombRemainingSeconds <= 0) {
-        clearInterval(bombTimer!);
-        bombTimer = null;
+        if (bombTimer) {
+          clearInterval(bombTimer);
+          bombTimer = null;
+        }
         
-        // Explosion!
         if (currentBombHolderId) {
           const victimId = currentBombHolderId;
           await storage.updateUserStatus(victimId, "eliminated");
@@ -244,16 +239,24 @@ export async function registerRoutes(
           } else if (active.length > 1) {
             const nextPlayer = active[Math.floor(Math.random() * active.length)];
             currentBombHolderId = nextPlayer.id;
-            bombRemainingSeconds = 30;
-            io.emit("bomb_started", { playerId: nextPlayer.id });
-            // Restart timer for next player
-            bombTimer = setInterval(/* recursive logic or refactor to function */); // Simplified for now
+            // Recursively start timer for the next player
+            startBombTimer();
           }
         }
       }
     }, 1000);
+  }
 
-    io.emit("bomb_started", { playerId: randomPlayer.id, seconds: 30 });
+  app.post("/api/game/start-bomb", async (req, res) => {
+    const users = await storage.getUsers();
+    const activePlayers = users.filter(u => u.lobbyStatus === "active");
+
+    if (activePlayers.length < 2) return res.status(400).json({ message: "عدد اللاعبين غير كاف" });
+
+    const randomPlayer = activePlayers[Math.floor(Math.random() * activePlayers.length)];
+    currentBombHolderId = randomPlayer.id;
+    
+    startBombTimer();
     res.json({ success: true });
   });
 

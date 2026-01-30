@@ -21,6 +21,7 @@ export function GameCircle() {
   const [bombPlayerId, setBombPlayerId] = useState<number | null>(null);
   const [winner, setWinner] = useState<User | null>(null);
   const [explodingId, setExplodingId] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState<number>(30);
 
   // تشغيل الأصوات
   const playSound = (type: keyof typeof SOUNDS) => {
@@ -49,6 +50,7 @@ export function GameCircle() {
       setWinner(null);
       setBombPlayerId(null);
       setExplodingId(null);
+      setTimeLeft(30);
       toast({ title: "تمت إعادة التعيين", description: "اللعبة جاهزة لجولة جديدة" });
     } catch (e) {
       console.error(e);
@@ -58,13 +60,19 @@ export function GameCircle() {
   useEffect(() => {
     const socket = io(window.location.origin, { path: "/socket.io" });
 
-    socket.on("bomb_started", ({ playerId }) => {
+    socket.on("bomb_started", ({ playerId, seconds }) => {
       console.log(`💣 Bomb passed to: ${playerId}`);
       if (bombPlayerId !== playerId) {
         playSound("pass");
         setBombPlayerId(playerId);
         setWinner(null);
+        if (seconds) setTimeLeft(seconds);
       }
+    });
+
+    socket.on("bomb_tick", ({ seconds }) => {
+      setTimeLeft(seconds);
+      if (seconds <= 5) playSound("tick");
     });
 
     socket.on("player_eliminated", ({ playerId }) => {
@@ -99,6 +107,7 @@ export function GameCircle() {
       setWinner(null);
       setBombPlayerId(null);
       setExplodingId(null);
+      setTimeLeft(30);
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
     });
 
@@ -133,14 +142,25 @@ export function GameCircle() {
   if (winner) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] animate-in zoom-in duration-500">
-        <Trophy size={120} className="text-yellow-400 mb-6 drop-shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-bounce" />
-        <h2 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-300 mb-4 text-center">
+        <div className="relative mb-8">
+          <Trophy size={160} className="text-yellow-400 absolute -top-20 -left-20 -rotate-12 drop-shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-bounce" />
+          <div className="w-64 h-64 rounded-full border-8 border-yellow-400 overflow-hidden shadow-[0_0_50px_rgba(250,204,21,0.4)]">
+            {winner.avatarUrl ? (
+              <img src={winner.avatarUrl} alt={winner.username} className="w-full h-full object-cover scale-110" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gray-800 text-white text-6xl font-black">
+                {winner.username.charAt(0)}
+              </div>
+            )}
+          </div>
+        </div>
+        <h2 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-300 mb-4 text-center">
           {winner.username}
         </h2>
-        <p className="text-3xl text-white/90 font-bold mb-8">👑 بطل الساحة 👑</p>
-        <Button onClick={handleResetGame} size="lg" className="bg-white text-black hover:bg-gray-200 font-bold">
-          <RotateCcw className="mr-2 h-5 w-5" /> لعبة جديدة
-        </Button>
+        <p className="text-4xl text-white/90 font-bold mb-8 tracking-widest">👑 بطل الساحة 👑</p>
+        <div className="bg-white/10 backdrop-blur-md px-6 py-2 rounded-full border border-white/20 animate-pulse">
+           <p className="text-white font-medium">تبدأ جولة جديدة خلال ثوانٍ...</p>
+        </div>
       </div>
     );
   }
@@ -148,6 +168,16 @@ export function GameCircle() {
   // === ساحة اللعب ===
   return (
     <div className="w-full flex flex-col items-center relative min-h-[80vh]">
+      
+      {/* 💣 مؤقت القنبلة المركزي */}
+      {bombPlayerId && (
+        <div className="absolute top-20 flex flex-col items-center z-50 animate-in fade-in slide-in-from-top-4">
+          <div className={`text-7xl font-black font-mono transition-colors duration-300 ${timeLeft <= 10 ? 'text-red-500 scale-110' : 'text-white'}`}>
+            {timeLeft}
+          </div>
+          <div className="text-white/40 text-sm font-bold uppercase tracking-widest mt-2">Seconds Left</div>
+        </div>
+      )}
 
       {/* 🎮 لوحة التحكم العلوية */}
       <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-4 z-50 bg-black/50 backdrop-blur-md p-2 rounded-full border border-white/10">
