@@ -28,7 +28,6 @@ export async function registerRoutes(
   const MAX_RECONNECT_ATTEMPTS = 5;
   let isPolling = false;
 
-  // دالة ذكية للحصول على liveChatId مع إعادة المحاولة التلقائية
   async function getLiveChatId(videoId: string, retries = 3): Promise<string | null> {
     console.log(`🔍 محاولة الحصول على liveChatId للفيديو: ${videoId} (محاولة ${4 - retries}/3)`);
 
@@ -71,7 +70,6 @@ export async function registerRoutes(
     return null;
   }
 
-  // دالة محسّنة لجلب الرسائل مع دعم nextPageToken
   async function pollChat() {
     if (!activeLiveChatId || !YT_API_KEY) {
       console.warn(`⚠️ تخطي الاستطلاع: activeLiveChatId=${activeLiveChatId}, hasAPIKey=${!!YT_API_KEY}`);
@@ -220,27 +218,42 @@ export async function registerRoutes(
             }
           }
 
-          // منطق تمرير القنبلة - استخدام Display ID (رقم الترتيب)
+          // منطق تمرير القنبلة - مع تشخيص مفصل
           if (currentBombHolderId) {
             const senderName = author?.displayName;
 
-            if (!senderName) continue;
+            if (!senderName) {
+              console.log(`⚠️ [تمرير القنبلة] لا يوجد اسم للمرسل`);
+              continue;
+            }
 
             try {
               const sender = await storage.getUserByUsername(senderName);
 
+              if (!sender) {
+                console.log(`⚠️ [تمرير القنبلة] المرسل "${senderName}" غير موجود في قاعدة البيانات`);
+                continue;
+              }
+
+              console.log(`🔍 [تمرير القنبلة] المرسل: ${sender.username} (DB ID: ${sender.id})`);
+              console.log(`🔍 [تمرير القنبلة] حامل القنبلة الحالي: DB ID ${currentBombHolderId}`);
+
               // التحقق من أن المرسل هو حامل القنبلة
-              if (sender && sender.id === currentBombHolderId) {
+              if (sender.id === currentBombHolderId) {
+                console.log(`✅ [تمرير القنبلة] المرسل هو حامل القنبلة - معالجة الطلب...`);
+
                 // جلب قائمة اللاعبين النشطين فقط
                 const allUsers = await storage.getUsers();
                 const activePlayers = allUsers.filter(u => u.lobbyStatus === "active");
 
+                console.log(`📋 [تمرير القنبلة] عدد اللاعبين النشطين: ${activePlayers.length}`);
+
                 // إنشاء خريطة Display ID → User
-                // Display ID يبدأ من 1 ويزيد تدريجياً
                 const displayIdMap = new Map<number, typeof activePlayers[0]>();
                 activePlayers.forEach((player, index) => {
-                  const displayId = index + 1; // الترتيب يبدأ من 1
+                  const displayId = index + 1;
                   displayIdMap.set(displayId, player);
+                  console.log(`   #${displayId} → ${player.username} (DB ID: ${player.id})`);
                 });
 
                 // استخراج الرقم من الرسالة باستخدام RegExp
@@ -248,6 +261,7 @@ export async function registerRoutes(
 
                 if (numberMatch) {
                   const targetDisplayId = parseInt(numberMatch[0]);
+                  console.log(`🎯 [تمرير القنبلة] الرقم المستخرج من الرسالة: ${targetDisplayId}`);
 
                   // التحقق من صحة الرقم
                   if (!isNaN(targetDisplayId) && targetDisplayId >= 1) {
@@ -255,24 +269,33 @@ export async function registerRoutes(
                     const targetUser = displayIdMap.get(targetDisplayId);
 
                     if (targetUser) {
+                      console.log(`✅ [تمرير القنبلة] تم العثور على اللاعب: ${targetUser.username} (DB ID: ${targetUser.id})`);
+
                       // التحقق من أن اللاعب المستهدف ليس نفس حامل القنبلة
                       if (targetUser.id !== currentBombHolderId) {
                         // تمرير القنبلة
+                        const oldHolderId = currentBombHolderId;
                         currentBombHolderId = targetUser.id;
                         io.emit("bomb_started", { playerId: targetUser.id });
 
-                        console.log(`💣 [تمرير القنبلة]: ${sender.username} → ${targetUser.username}`);
-                        console.log(`   Display ID: #${targetDisplayId} → Database ID: ${targetUser.id}`);
+                        console.log(`💣 [تمرير القنبلة] نجح التمرير!`);
+                        console.log(`   من: ${sender.username} (DB ID: ${oldHolderId})`);
+                        console.log(`   إلى: ${targetUser.username} (DB ID: ${targetUser.id})`);
+                        console.log(`   Display ID المستخدم: #${targetDisplayId}`);
                       } else {
-                        console.warn(`⚠️ اللاعب حاول تمرير القنبلة لنفسه`);
+                        console.warn(`⚠️ [تمرير القنبلة] اللاعب حاول تمرير القنبلة لنفسه`);
                         io.emit("bomb_transfer_failed", { 
                           reason: "cannot_transfer_to_self",
                           displayId: targetDisplayId 
                         });
                       }
                     } else {
-                      console.warn(`⚠️ رقم الترتيب ${targetDisplayId} غير موجود`);
-                      console.log(`   اللاعبون النشطون: ${activePlayers.length} لاعب (1-${activePlayers.length})`);
+                      console.warn(`❌ [تمرير القنبلة] Display ID #${targetDisplayId} غير موجود`);
+                      console.log(`   النطاق المتاح: 1-${activePlayers.length}`);
+                      console.log(`   اللاعبون المتاحون:`);
+                      activePlayers.forEach((p, i) => {
+                        console.log(`      #${i+1}: ${p.username}`);
+                      });
 
                       io.emit("bomb_transfer_failed", { 
                         reason: "player_not_found",
@@ -281,12 +304,24 @@ export async function registerRoutes(
                       });
                     }
                   } else {
-                    console.warn(`⚠️ رقم غير صالح: ${targetDisplayId}`);
+                    console.warn(`⚠️ [تمرير القنبلة] رقم غير صالح: ${targetDisplayId}`);
                   }
+                } else {
+                  console.log(`ℹ️ [تمرير القنبلة] لا يوجد رقم في الرسالة: "${cleanText}"`);
                 }
+              } else {
+                console.log(`⚠️ [تمرير القنبلة] المرسل ليس حامل القنبلة`);
+                console.log(`   المرسل: ${sender.username} (DB ID: ${sender.id})`);
+                console.log(`   حامل القنبلة: DB ID ${currentBombHolderId}`);
               }
             } catch (bombError) {
               console.error("❌ خطأ في تمرير القنبلة:", bombError);
+            }
+          } else {
+            // لا توجد قنبلة نشطة - تجاهل الأرقام
+            const numberMatch = cleanText.match(/\d+/);
+            if (numberMatch) {
+              console.log(`ℹ️ [رسالة تحتوي على رقم] لكن لا توجد قنبلة نشطة - تجاهل`);
             }
           }
 
