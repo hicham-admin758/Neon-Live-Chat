@@ -98,34 +98,21 @@ export async function registerRoutes(
 
         // 2️⃣ منطق القنبلة الذكي (Smart Bomb Logic)
         if (currentBombHolderId) {
-          // جلب اللاعب الذي أرسل الرسالة
           const sender = await storage.getUserByUsername(author.displayName);
 
-          // هل المرسل هو نفسه حامل القنبلة؟
           if (sender && sender.id === currentBombHolderId) {
-
             // استخراج الأرقام من الرسالة (مثلاً: "مرر لـ 17" -> يستخرج 17)
             const numberMatch = text.match(/\d+/);
 
             if (numberMatch) {
               const targetId = parseInt(numberMatch[0]);
-              console.log(`🎯 حامل القنبلة يريد التمرير إلى اللاعب رقم: #${targetId}`);
-
-              // التحقق من أن الهدف موجود ونشيط
               const allUsers = await storage.getUsers();
               const targetUser = allUsers.find(u => u.id === targetId);
 
-              if (targetUser && targetUser.lobbyStatus === "active") {
-                if (targetUser.id !== currentBombHolderId) {
-                  // ✅ نجاح التمرير
-                  currentBombHolderId = targetUser.id;
-                  io.emit("bomb_started", { playerId: targetUser.id });
-                  console.log(`✅ تم تمرير القنبلة إلى ${targetUser.username}`);
-                } else {
-                  console.log("⚠️ لا يمكن التمرير لنفسك");
-                }
-              } else {
-                console.log(`❌ اللاعب رقم ${targetId} غير موجود أو تم إقصاؤه`);
+              if (targetUser && targetUser.lobbyStatus === "active" && targetUser.id !== currentBombHolderId) {
+                currentBombHolderId = targetUser.id;
+                io.emit("bomb_started", { playerId: targetUser.id });
+                console.log(`✅ تم تمرير القنبلة إلى ${targetUser.username}`);
               }
             }
           }
