@@ -86,6 +86,13 @@ export function GameCircle() {
       setWinner(winnerUser);
       setBombPlayerId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      
+      // Auto-restart handling is already in backend, 
+      // but we ensure UI reflects state after 5 seconds
+      setTimeout(() => {
+        setWinner(null);
+        queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      }, 5500);
     });
 
     socket.on("game_reset", () => {

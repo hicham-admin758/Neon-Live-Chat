@@ -127,6 +127,36 @@ export async function registerRoutes(
 
   // ==================== API Routes ====================
 
+  app.get("/api/stream-meta", async (req, res) => {
+    try {
+      const { url } = req.query;
+      if (typeof url !== "string") return res.status(400).json({ message: "Invalid URL" });
+      
+      const videoIdMatch = url.match(/(?:v=|\/live\/|\/embed\/|youtu\.be\/)([^?&]+)/);
+      if (!videoIdMatch) return res.status(400).json({ message: "Invalid YouTube URL" });
+      
+      const videoId = videoIdMatch[1];
+      const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YT_API_KEY}`;
+      const ytRes = await fetch(apiUrl);
+      const data = await ytRes.json();
+      
+      if (!data.items?.[0]) {
+        return res.json({ 
+          thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+          title: "يوتيوب مباشر"
+        });
+      }
+      
+      const snippet = data.items[0].snippet;
+      res.json({
+        thumbnail: snippet.thumbnails?.high?.url || snippet.thumbnails?.default?.url,
+        title: snippet.title
+      });
+    } catch (e) {
+      res.status(500).json({ message: "Internal error" });
+    }
+  });
+
   app.post("/api/sync", async (req, res) => {
     try {
       const { url } = req.body;
@@ -143,9 +173,17 @@ export async function registerRoutes(
       messageCache.clear();
 
       if (activeLiveChatId) {
+        // جلب البيانات الأساسية للفيديو
+        const metaUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YT_API_KEY}`;
+        const metaRes = await fetch(metaUrl);
+        const metaData = await metaRes.json();
+        const snippet = metaData.items?.[0]?.snippet;
+        const thumbnail = snippet?.thumbnails?.high?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+        const title = snippet?.title || "Live Stream";
+
         // ⚡ تسريع الاستطلاع إلى 3 ثواني بدلاً من 10
         pollingInterval = setInterval(pollChat, 3000);
-        res.json({ success: true, title: "Live Stream" });
+        res.json({ success: true, title, thumbnail });
         console.log("✅ Started polling for chat:", activeLiveChatId);
       } else {
         res.status(400).json({ message: "لا يوجد شات مباشر" });
