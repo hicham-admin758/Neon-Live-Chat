@@ -73,7 +73,9 @@ export function GameCircle() {
       playSound("explosion");
       setExplodingId(playerId);
 
-      setBombPlayerId(prev => prev === playerId ? null : prev);
+      if (bombPlayerId === playerId) {
+        setBombPlayerId(null);
+      }
 
       setTimeout(() => {
         setExplodingId(null);
