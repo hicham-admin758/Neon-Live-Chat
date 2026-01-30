@@ -1,11 +1,12 @@
 import { useUsers, useGameCircle } from "@/hooks/use-users";
-import { Bomb, User as UserIcon } from "lucide-react";
+import { Bomb, User as UserIcon, Trophy, Skull } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import { queryClient } from "@/lib/queryClient";
 import { api } from "@shared/routes";
 import { type User } from "@shared/schema";
 
+// روابط الأصوات
 const SOUNDS = {
   tick: "https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3",
   explosion: "https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3",
@@ -17,291 +18,189 @@ export function GameCircle() {
   const { data: users, isLoading } = useUsers();
   const { isConnected } = useGameCircle();
   const [bombPlayerId, setBombPlayerId] = useState<number | null>(null);
-  const [isStarting, setIsStarting] = useState(false);
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [winner, setWinner] = useState<User | null>(null);
   const [explodingId, setExplodingId] = useState<number | null>(null);
 
-  const audioRefs = useRef<{ [key: string]: HTMLAudioElement }>({});
-
-  useEffect(() => {
-    // Preload sounds
-    Object.entries(SOUNDS).forEach(([key, url]) => {
-      const audio = new Audio(url);
-      audio.load();
-      audioRefs.current[key] = audio;
-    });
-  }, []);
-
-  const playSound = (key: keyof typeof SOUNDS, playbackRate = 1) => {
-    const audio = audioRefs.current[key];
-    if (audio) {
-      audio.currentTime = 0;
-      audio.playbackRate = playbackRate;
-      audio.play().catch(() => {}); // Ignore autoplay errors
-    }
+  // دالة تشغيل الأصوات
+  const playSound = (type: keyof typeof SOUNDS) => {
+    const audio = new Audio(SOUNDS[type]);
+    audio.volume = 0.6;
+    audio.play().catch(e => console.log("Audio play failed", e));
   };
 
   useEffect(() => {
-    if (users && users.length === 1 && bombPlayerId === null && timeLeft === null) {
-      setWinner(users[0]);
-      playSound("victory");
+    const socket = io(window.location.origin, { path: "/socket.io" });
 
-      // Auto-reset after 5 seconds
-      const timeout = setTimeout(async () => {
-        try {
-          await fetch("/api/game/reset", { method: "POST" });
-        } catch (e) {
-          console.error("Failed to reset game", e);
-        }
-      }, 5000);
-
-      return () => clearTimeout(timeout);
-    } else {
-      setWinner(null);
-    }
-  }, [users, bombPlayerId, timeLeft]);
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (timeLeft !== null && timeLeft > 0) {
-      // Play tick sound with increasing speed
-      const speed = 1 + (30 - timeLeft) / 15; // Faster as time runs out
-      playSound("tick", speed);
-
-      timer = setInterval(() => {
-        setTimeLeft(prev => (prev !== null && prev > 0 ? prev - 1 : 0));
-      }, 1000);
-    } else if (timeLeft === 0 && bombPlayerId) {
-      playSound("explosion");
-      setExplodingId(bombPlayerId);
-
-      // Screen shake effect handled via state/className on main container
-      setTimeout(() => setExplodingId(null), 1000);
-
-      // Trigger elimination
-      fetch("/api/game/eliminate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId: bombPlayerId }),
-      }).catch(console.error);
-      setBombPlayerId(null);
-      setTimeLeft(null);
-    }
-    return () => clearInterval(timer);
-  }, [timeLeft, bombPlayerId]);
-
-  useEffect(() => {
-    const socket = io({ path: "/socket.io" });
-    socket.on("bomb_started", (data: { playerId: number }) => {
-      setBombPlayerId(data.playerId);
-      setIsStarting(false);
-      setTimeLeft(30);
-      playSound("pass");
+    socket.on("connect", () => {
+      console.log("✅ Connected to WebSocket");
     });
-    socket.on("player_eliminated", (data: { playerId: number }) => {
-      if (data.playerId === bombPlayerId) {
-        setBombPlayerId(null);
-        setTimeLeft(null);
+
+    // 1. استقبال القنبلة
+    socket.on("bomb_started", ({ playerId }) => {
+      console.log(`💣 Bomb passed to: ${playerId}`);
+      if (bombPlayerId !== playerId) {
+        playSound("pass");
+        setBombPlayerId(playerId);
+        setWinner(null); // إخفاء شاشة الفوز عند بدء جولة جديدة
       }
-      queryClient.invalidateQueries({ queryKey: [api.users.list.path] });
     });
-    socket.on("game_reset", () => {
-      setBombPlayerId(null);
-      setTimeLeft(null);
-      setWinner(null);
-      queryClient.invalidateQueries({ queryKey: [api.users.list.path] });
-    });
-    socket.on("game_winner", (winnerData: User) => {
-      setWinner(winnerData);
-      setBombPlayerId(null);
-      setTimeLeft(null);
-      playSound("victory");
 
-      // Auto-restart after 5 seconds
-      setTimeout(async () => {
-        try {
-          await fetch("/api/game/reset", { method: "POST" });
-          setWinner(null);
-        } catch (e) {
-          console.error("Auto-restart failed", e);
-        }
-      }, 5000);
+    // 2. عند انفجار القنبلة (الإقصاء)
+    socket.on("player_eliminated", ({ playerId }) => {
+      console.log(`💥 Eliminated: ${playerId}`);
+      playSound("explosion");
+      setExplodingId(playerId); // تفعيل تأثير الانفجار
+
+      // إخفاء القنبلة مؤقتاً
+      if (bombPlayerId === playerId) {
+        setBombPlayerId(null);
+      }
+
+      // بعد ثانية واحدة، قم بتحديث القائمة لإخفاء اللاعب
+      setTimeout(() => {
+        setExplodingId(null);
+        // 🔥 هذا السطر هو الأهم: يجبر الصفحة على تحديث القائمة فوراً
+        queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      }, 1000);
     });
+
+    // 3. عند الفوز
+    socket.on("game_winner", (winnerUser: User) => {
+      console.log(`🏆 Winner: ${winnerUser.username}`);
+      playSound("victory");
+      setWinner(winnerUser);
+      setBombPlayerId(null);
+      // تحديث القائمة للتأكد من حالة الجميع
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+    });
+
+    // 4. إعادة تعيين اللعبة
+    socket.on("game_reset", () => {
+      setWinner(null);
+      setBombPlayerId(null);
+      setExplodingId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+    });
+
+    // 5. لاعب جديد انضم
+    socket.on("new_player", () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+    });
+
     return () => {
       socket.disconnect();
     };
-  }, [timeLeft]);
+  }, [bombPlayerId]);
 
-  const startBomb = async () => {
-    setIsStarting(true);
-    try {
-      await fetch("/api/game/start-bomb", { method: "POST" });
-    } catch (e) {
-      console.error("Failed to start bomb", e);
-      setIsStarting(false);
-    }
-  };
-
-  const resetGame = async () => {
-    try {
-      await fetch("/api/game/clear-participants", { method: "POST" });
-    } catch (e) {
-      console.error("Failed to clear participants", e);
-    }
-  };
-
-  // Dynamic radius calculation based on number of players
+  // حساب نصف القطر بناءً على عدد اللاعبين
   const getRadius = () => {
-    if (!users || users.length === 0) return 140;
-    if (users.length <= 5) return 140;
-    if (users.length <= 10) return 180;
-    if (users.length <= 15) return 220;
-    return 260; // For more than 15 players
+    const count = users?.filter(u => u.lobbyStatus === "active").length || 0;
+    if (count <= 5) return 140;
+    if (count <= 10) return 180;
+    if (count <= 15) return 220;
+    return 260; // دائرة كبيرة جداً للأعداد الكبيرة
   };
 
+  const activePlayers = users?.filter(u => u.lobbyStatus === "active") || [];
   const radius = getRadius();
 
-  return (
-    <section id="game-circle" className={`py-16 px-8 max-w-[1400px] mx-auto w-full transition-transform duration-100 ${explodingId ? 'animate-shake' : ''} overflow-y-auto max-h-screen`}>
-      <div className="flex flex-col items-center gap-8 min-h-full">
-        <h2 className="text-center text-[2.5rem] mb-4 relative pb-4 after:content-[''] after:absolute after:bottom-0 after:left-1/2 after:-translate-x-1/2 after:w-[100px] after:h-[4px] after:bg-gradient-to-r after:from-[#8a2be2] after:to-[#00ffff] after:rounded-sm">
-          ساحة اللعب المباشرة
-          <span className="block text-sm font-normal text-cyan-400 mt-2">
-            {isConnected ? "🟢 متصل بالخادم" : "🔴 غير متصل"}
-          </span>
+  // === شاشة الفوز ===
+  if (winner) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] animate-in zoom-in duration-500">
+        <Trophy size={120} className="text-yellow-400 mb-6 drop-shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-bounce" />
+        <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-300 mb-4 text-center">
+          {winner.username}
         </h2>
+        <p className="text-2xl text-white/80 font-bold">👑 بطل الساحة 👑</p>
+      </div>
+    );
+  }
 
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={startBomb}
-            disabled={isStarting || !users?.length}
-            className="btn-gradient text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
-          >
-            <Bomb size={20} />
-            {isStarting ? "جاري البدء..." : "ابدأ القنبلة"}
-          </button>
-        </div>
+  // === ساحة اللعب ===
+  return (
+    <div className="relative w-full h-full flex items-center justify-center py-20 overflow-hidden">
+      {/* دائرة الخلفية */}
+      <div 
+        className="absolute rounded-full border-4 border-dashed border-white/10 animate-[spin_60s_linear_infinite]"
+        style={{ width: radius * 2.5, height: radius * 2.5 }}
+      />
 
-        <div className={`relative w-full max-w-[600px] flex items-center justify-center bg-glass-card border border-purple-500/10 rounded-full overflow-visible ${
-          users && users.length > 10 ? 'min-h-[700px] min-w-[700px]' : 
-          users && users.length > 5 ? 'min-h-[600px] min-w-[600px]' : 
-          'aspect-square'
-        }`}>
-          {winner && (
-            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-xl rounded-full animate-in fade-in zoom-in duration-500">
-              <div className="relative mb-8 group">
-                <div className="absolute -inset-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full blur-xl opacity-50 animate-pulse" />
-                <div className="relative w-48 h-48 rounded-full p-1 bg-gradient-to-br from-yellow-400 via-orange-500 to-yellow-400 shadow-[0_0_50px_rgba(250,204,21,0.5)] animate-bounce-slow">
-                  <div className="w-full h-full rounded-full bg-[#1a1f3a] overflow-hidden border-4 border-yellow-400">
-                    {winner.avatarUrl ? (
-                      <img src={winner.avatarUrl} alt={winner.username} className="w-full h-full object-cover scale-110" />
+      {/* حاوية اللاعبين */}
+      <div 
+        className="relative transition-all duration-1000 ease-out"
+        style={{ width: radius * 2, height: radius * 2 }}
+      >
+        {activePlayers.map((user, index) => {
+          const total = activePlayers.length;
+          const angle = (index / total) * 2 * Math.PI - Math.PI / 2; // -90deg start
+          const x = Math.cos(angle) * radius;
+          const y = Math.sin(angle) * radius;
+
+          const isHoldingBomb = bombPlayerId === user.id;
+          const isExploding = explodingId === user.id;
+
+          return (
+            <div
+              key={user.id}
+              className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-500
+                ${isExploding ? "scale-150 z-50" : "hover:scale-110 z-10"}
+              `}
+              style={{ 
+                transform: `translate(${x}px, ${y}px) translate(-50%, -50%)`,
+              }}
+            >
+              <div className="flex flex-col items-center gap-2 relative">
+
+                {/* دائرة الصورة */}
+                <div className={`relative w-16 h-16 md:w-20 md:h-20 rounded-full border-4 shadow-2xl overflow-visible transition-all duration-300
+                  ${isHoldingBomb ? "border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.6)] animate-pulse" : "border-white/20"}
+                `}>
+                   {/* رقم اللاعب الكبير جداً والواضح */}
+                   <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-50">
+                      <span className="bg-cyan-400 text-black font-black text-xl px-3 py-1 rounded-full shadow-[0_0_15px_rgba(34,211,238,0.8)] border-2 border-white">
+                        #{user.id}
+                      </span>
+                   </div>
+
+                  <div className="w-full h-full rounded-full overflow-hidden bg-black/50">
+                    {user.avatarUrl ? (
+                      <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-5xl font-black text-white uppercase">
-                        {winner.username.slice(0, 2)}
+                      <div className="w-full h-full flex items-center justify-center bg-gray-800 text-white">
+                         <span className="font-bold text-2xl">{user.username.charAt(0)}</span>
                       </div>
                     )}
                   </div>
-                </div>
-                <div className="absolute -top-6 -right-6 text-yellow-400 rotate-12 animate-wiggle">
-                  <Bomb size={64} fill="currentColor" />
-                </div>
-              </div>
 
-              <div className="text-center space-y-4 px-6 relative">
-                <h3 className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-yellow-400 drop-shadow-2xl">
-                  الفائز بالمباراة!
-                </h3>
-                <div className="text-3xl md:text-4xl font-bold text-cyan-400 tracking-tighter drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">
-                  {winner.username}
-                </div>
-                <div className="text-white/50 text-sm font-medium tracking-widest uppercase pt-4 animate-pulse">
-                  سيبدأ التحدي التالي قريباً...
-                </div>
-              </div>
-            </div>
-          )}
-          {timeLeft !== null && (
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center">
-              <div className="text-8xl font-black text-white drop-shadow-[0_0_25px_rgba(0,255,255,0.7)] animate-pulse">
-                {timeLeft}
-              </div>
-              <div className="text-cyan-400 font-black tracking-[0.2em] text-xl uppercase mt-4">
-                ثانية
-              </div>
-            </div>
-          )}
-          {isLoading ? (
-            <div className="text-[#b8b8ff]">جاري تحميل اللاعبين...</div>
-          ) : !users || users.length === 0 ? (
-            <div className="flex flex-col items-center justify-center text-[#b8b8ff] gap-4 p-8 text-center">
-              <UserIcon size={48} className="opacity-50" />
-              <p>لا يوجد لاعبين نشطين حالياً. اكتب !دخول للانضمام!</p>
-            </div>
-          ) : (
-            <div className="relative w-full h-full">
-              {users.map((user, idx) => {
-                const angle = (idx / users.length) * 2 * Math.PI - Math.PI / 2;
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
-                const isHoldingBomb = bombPlayerId === user.id;
-
-                return (
-                  <div 
-                    key={user.id} 
-                    className="absolute transition-all duration-700 ease-out"
-                    style={{ 
-                      left: `calc(50% + ${x}px)`, 
-                      top: `calc(50% + ${y}px)`,
-                      transform: 'translate(-50%, -50%)'
-                    }}
-                  >
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="relative group">
-                        {/* ID Number Badge - MUCH LARGER and HIGH CONTRAST */}
-                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-cyan-400 text-black text-xl font-black px-5 py-1.5 rounded-full border-2 border-white shadow-[0_0_25px_rgba(0,255,255,0.9)] z-[60] min-w-[60px] text-center pointer-events-none">
-                          #{user.id}
-                        </div>
-
-                        <div className={`relative w-28 h-28 rounded-full p-[4px] transition-all duration-300 ${
-                          isHoldingBomb 
-                            ? "bg-red-500 shadow-[0_0_40px_rgba(239,68,68,1)] scale-110 z-20" 
-                            : "bg-gradient-to-br from-purple-500 to-cyan-400 shadow-[0_0_20px_rgba(138,43,226,0.4)]"
-                        }`}>
-                          <div className="w-full h-full rounded-full bg-[#1a1f3a] overflow-hidden flex items-center justify-center relative">
-                            {user.avatarUrl ? (
-                              <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
-                            ) : (
-                              <span className="text-3xl font-black text-white uppercase">{user?.username?.slice(0, 2) || "??"}</span>
-                            )}
-
-                            {/* Explosion Overlay */}
-                            {explodingId === user.id && (
-                              <div className="absolute inset-0 bg-orange-500 animate-ping z-50 flex items-center justify-center">
-                                <div className="absolute inset-0 bg-yellow-400 animate-pulse opacity-80" />
-                              </div>
-                            )}
-                          </div>
-                          {isHoldingBomb && (
-                            <div className="absolute -top-8 -right-8 text-red-500 animate-bounce drop-shadow-[0_0_15px_rgba(239,68,68,0.9)] z-50">
-                              <Bomb size={42} fill="currentColor" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <span className={`text-base font-bold truncate max-w-[120px] px-3 py-1.5 rounded-xl ${
-                        isHoldingBomb ? "bg-red-500 text-white shadow-xl scale-110" : "text-white/90 bg-black/40 backdrop-blur-sm"
-                      }`}>
-                        {user.username}
-                      </span>
+                  {/* أيقونة القنبلة فوق الصورة */}
+                  {isHoldingBomb && (
+                    <div className="absolute -top-8 -right-8 z-50 animate-bounce">
+                      <Bomb size={48} className="text-red-500 fill-red-600 drop-shadow-2xl" />
                     </div>
-                  </div>
-                );
-              })}
+                  )}
+
+                  {/* تأثير الانفجار */}
+                  {isExploding && (
+                    <div className="absolute inset-0 -m-8 flex items-center justify-center z-50 pointer-events-none">
+                       <Skull size={80} className="text-white animate-ping absolute" />
+                       <div className="w-32 h-32 bg-orange-500 rounded-full animate-ping opacity-75"></div>
+                    </div>
+                  )}
+                </div>
+
+                {/* اسم اللاعب */}
+                <div className="bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10 max-w-[120px]">
+                  <p className="text-white font-bold text-sm truncate text-center dir-rtl">
+                    {user.username}
+                  </p>
+                </div>
+
+              </div>
             </div>
-          )}
-        </div>
+          );
+        })}
       </div>
-    </section>
+    </div>
   );
 }
