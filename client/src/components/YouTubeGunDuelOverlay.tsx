@@ -1,6 +1,4 @@
-// components/YouTubeGunDuelOverlay.tsx
 import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { Target, Trophy, Skull, Crown, Zap } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
@@ -60,28 +58,18 @@ const PlayerCard = ({
   }
 
   return (
-    <motion.div 
-      className="flex flex-col items-center gap-5 relative"
-      initial={{ opacity: 0, x: position === 'left' ? -100 : 100 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.5 }}
-    >
+    <div className={`flex flex-col items-center gap-5 relative transition-opacity duration-500 ${isDead ? 'opacity-50' : 'opacity-100'}`}>
       {/* 👤 صورة اللاعب */}
       <div className={`
         relative w-40 h-40 rounded-full border-4 transition-all duration-300
         ${isDead 
-          ? 'border-red-600 grayscale opacity-50' 
+          ? 'border-red-600 grayscale' 
           : 'border-cyan-400 shadow-[0_0_40px_rgba(34,211,238,0.6)]'
         }
       `}>
         {/* تأثير الانفجار */}
         {isDead && (
-          <motion.div
-            className="absolute inset-0 bg-red-500 rounded-full"
-            initial={{ scale: 1, opacity: 0.8 }}
-            animate={{ scale: 3, opacity: 0 }}
-            transition={{ duration: 0.6 }}
-          />
+          <div className="absolute inset-0 bg-red-500 rounded-full opacity-50 animate-pulse"></div>
         )}
 
         <div className="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-gray-800 to-black">
@@ -101,26 +89,16 @@ const PlayerCard = ({
 
         {/* جمجمة عند الموت */}
         {isDead && (
-          <motion.div
-            className="absolute inset-0 flex items-center justify-center"
-            initial={{ scale: 0, rotate: -180 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ duration: 0.4 }}
-          >
+          <div className="absolute inset-0 flex items-center justify-center animate-bounce">
             <Skull size={70} className="text-red-600 drop-shadow-2xl" />
-          </motion.div>
+          </div>
         )}
 
         {/* تاج الفائز */}
         {!isDead && player.isAlive && (
-          <motion.div
-            className="absolute -top-12 left-1/2 -translate-x-1/2"
-            initial={{ y: -20, opacity: 0, rotate: -20 }}
-            animate={{ y: 0, opacity: 1, rotate: 0 }}
-            transition={{ delay: 1, duration: 0.5 }}
-          >
-            <Crown size={60} className="text-yellow-400 fill-yellow-400 drop-shadow-lg animate-bounce" />
-          </motion.div>
+          <div className="absolute -top-12 left-1/2 -translate-x-1/2 animate-bounce">
+            <Crown size={60} className="text-yellow-400 fill-yellow-400 drop-shadow-lg" />
+          </div>
         )}
       </div>
 
@@ -136,38 +114,24 @@ const PlayerCard = ({
       </div>
 
       {/* 🔫 المسدس */}
-      <motion.div
-        className={`text-8xl ${position === 'left' ? 'scale-x-[-1]' : ''}`}
-        animate={shotFired ? { 
-          x: position === 'left' ? 40 : -40,
-          rotate: position === 'left' ? -25 : 25,
-          scale: 1.4
-        } : {}}
-        transition={{ duration: 0.2 }}
+      <div
+        className={`text-8xl transition-all duration-200 ${position === 'left' ? 'scale-x-[-1]' : ''} ${shotFired ? 'scale-125' : 'scale-100'}`}
       >
         🔫
-      </motion.div>
+      </div>
 
       {/* 💥 تأثير إطلاق النار */}
-      <AnimatePresence>
-        {shotFired && (
-          <motion.div
-            className={`absolute top-1/2 ${position === 'left' ? 'right-0' : 'left-0'}`}
-            initial={{ scale: 0, x: position === 'left' ? 20 : -20 }}
-            animate={{ scale: [1, 2.5, 0], x: position === 'left' ? 120 : -120 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="text-8xl">💥</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+      {shotFired && (
+        <div className={`absolute top-1/2 ${position === 'left' ? 'right-0' : 'left-0'} text-8xl animate-ping`}>
+          💥
+        </div>
+      )}
+    </div>
   );
 };
 
 // 🎮 المكون الرئيسي
-export default function YouTubeGunDuelOverlay() {
+function YouTubeGunDuelOverlay() {
   const [gameState, setGameState] = useState<GameState>({
     isWaiting: true,
     isCountdown: false,
@@ -318,7 +282,7 @@ export default function YouTubeGunDuelOverlay() {
   }, []);
 
   return (
-    <div className="w-screen h-screen bg-transparent flex items-center justify-center relative overflow-hidden">
+    <div className="w-full min-h-screen bg-transparent flex items-center justify-center relative overflow-hidden">
 
       {/* 🎨 خلفية شبه شفافة */}
       <div className="absolute inset-0 bg-gradient-to-br from-black/40 via-transparent to-black/40"></div>
@@ -326,11 +290,7 @@ export default function YouTubeGunDuelOverlay() {
       <div className="relative z-10 w-full max-w-7xl px-8">
 
         {/* 🎯 عنوان اللعبة */}
-        <motion.div 
-          className="text-center mb-12"
-          initial={{ y: -50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-        >
+        <div className="text-center mb-12 opacity-0 animate-[fadeIn_0.5s_ease-in_forwards]">
           <div className="flex items-center justify-center gap-4 mb-4">
             <Target className="text-red-500" size={60} />
             <h1 className="text-7xl font-black text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.5)]">
@@ -341,17 +301,13 @@ export default function YouTubeGunDuelOverlay() {
 
           {/* عداد المنتظرين */}
           {gameState.isWaiting && gameState.waitingCount > 0 && (
-            <motion.div
-              className="mt-4 px-8 py-3 bg-cyan-600/80 backdrop-blur-md rounded-full inline-block border-2 border-cyan-400"
-              animate={{ scale: [1, 1.05, 1] }}
-              transition={{ repeat: Infinity, duration: 2 }}
-            >
+            <div className="mt-4 px-8 py-3 bg-cyan-600/80 backdrop-blur-md rounded-full inline-block border-2 border-cyan-400 animate-pulse">
               <p className="text-white text-2xl font-black">
                 👥 {gameState.waitingCount} لاعبين في الانتظار
               </p>
-            </motion.div>
+            </div>
           )}
-        </motion.div>
+        </div>
 
         {/* 🎮 منطقة اللعب */}
         <div className="grid grid-cols-3 gap-12 items-center">
@@ -367,30 +323,22 @@ export default function YouTubeGunDuelOverlay() {
           </div>
 
           {/* 🎯 المنطقة الوسطى */}
-          <div className="flex flex-col items-center justify-center gap-8">
+          <div className="flex flex-col items-center justify-center gap-8 min-h-[400px]">
 
             {/* حالة الانتظار */}
             {gameState.isWaiting && (
-              <motion.div 
-                className="text-center"
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-              >
+              <div className="text-center">
                 <div className="w-48 h-48 rounded-full border-4 border-dashed border-white/30 flex flex-col items-center justify-center animate-spin-slow mb-6 bg-black/40 backdrop-blur-md">
                   <div className="text-7xl mb-2">🎮</div>
                   <div className="text-white text-xl font-bold animate-pulse">اكتب !دخول</div>
                 </div>
                 <p className="text-white/70 text-2xl font-bold">في شات اليوتيوب للانضمام</p>
-              </motion.div>
+              </div>
             )}
 
             {/* العد التنازلي */}
             {gameState.isCountdown && (
-              <motion.div
-                className="text-center"
-                initial={{ scale: 0.5, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-              >
+              <div className="text-center">
                 <div className="relative">
                   <div className="absolute inset-0 bg-orange-500 rounded-full blur-3xl opacity-60 animate-pulse"></div>
 
@@ -401,32 +349,24 @@ export default function YouTubeGunDuelOverlay() {
                       : 'border-orange-500 bg-orange-500/30'
                     }
                   `}>
-                    <motion.span 
+                    <span 
                       className={`
-                        text-9xl font-black
+                        text-9xl font-black transition-all duration-300
                         ${gameState.countdown <= 3 ? 'text-red-300' : 'text-orange-300'}
                       `}
                       key={gameState.countdown}
-                      initial={{ scale: 1.5, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ duration: 0.3 }}
                     >
                       {gameState.countdown}
-                    </motion.span>
+                    </span>
                   </div>
                 </div>
                 <p className="text-white text-3xl font-bold mt-6">استعد للمبارزة...</p>
-              </motion.div>
+              </div>
             )}
 
             {/* الرقم المستهدف */}
             {gameState.isPlaying && gameState.targetNumber && (
-              <motion.div
-                className="text-center"
-                initial={{ scale: 0, rotate: -180 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ type: "spring", duration: 0.6 }}
-              >
+              <div className="text-center">
                 <div className="relative">
                   <div className="absolute inset-0 bg-cyan-500 rounded-full blur-3xl opacity-70 animate-ping"></div>
 
@@ -436,24 +376,15 @@ export default function YouTubeGunDuelOverlay() {
                     </span>
                   </div>
                 </div>
-                <motion.div
-                  className="mt-8 px-10 py-4 bg-cyan-600/80 backdrop-blur-md rounded-full border-2 border-cyan-400"
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{ repeat: Infinity, duration: 1 }}
-                >
+                <div className="mt-8 px-10 py-4 bg-cyan-600/80 backdrop-blur-md rounded-full border-2 border-cyan-400 animate-pulse">
                   <p className="text-white text-3xl font-black">⚡ اكتبه في الشات! ⚡</p>
-                </motion.div>
-              </motion.div>
+                </div>
+              </div>
             )}
 
             {/* الفائز */}
             {gameState.isFinished && gameState.winner && (
-              <motion.div
-                className="text-center"
-                initial={{ scale: 0, y: 50 }}
-                animate={{ scale: 1, y: 0 }}
-                transition={{ delay: 1.5, type: "spring" }}
-              >
+              <div className="text-center">
                 <div className="relative mb-8">
                   <div className="absolute inset-0 bg-yellow-500 rounded-full blur-3xl opacity-70 animate-pulse"></div>
                   <Trophy size={140} className="relative text-yellow-400 fill-yellow-400 drop-shadow-2xl animate-bounce" />
@@ -475,25 +406,19 @@ export default function YouTubeGunDuelOverlay() {
                 {/* نجوم متحركة */}
                 <div className="absolute inset-0 pointer-events-none">
                   {[...Array(20)].map((_, i) => (
-                    <motion.div
+                    <div
                       key={i}
-                      className="absolute w-4 h-4 bg-yellow-400 rounded-full"
-                      initial={{ x: "50%", y: "50%", scale: 0 }}
-                      animate={{ 
-                        x: `${50 + (Math.random() - 0.5) * 100}%`,
-                        y: `${50 + (Math.random() - 0.5) * 100}%`,
-                        scale: [0, 1, 0],
-                        opacity: [0, 1, 0]
-                      }}
-                      transition={{ 
-                        duration: 2,
-                        delay: i * 0.1,
-                        repeat: Infinity
+                      className="absolute w-4 h-4 bg-yellow-400 rounded-full animate-ping"
+                      style={{
+                        top: `${Math.random() * 100}%`,
+                        left: `${Math.random() * 100}%`,
+                        animationDelay: `${i * 0.1}s`,
+                        animationDuration: `${2 + Math.random()}s`
                       }}
                     />
                   ))}
                 </div>
-              </motion.div>
+              </div>
             )}
           </div>
 
@@ -510,23 +435,28 @@ export default function YouTubeGunDuelOverlay() {
 
         {/* 📜 تعليمات سريعة */}
         {gameState.isWaiting && (
-          <motion.div
-            className="mt-12 text-center"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
+          <div className="mt-12 text-center opacity-0 animate-[fadeIn_0.5s_ease-in_0.3s_forwards]">
             <div className="inline-block px-8 py-4 bg-black/60 backdrop-blur-xl rounded-2xl border border-white/20">
               <p className="text-white/80 text-xl font-medium">
                 💬 اكتب <span className="text-cyan-400 font-black">!دخول</span> في شات اليوتيوب للانضمام للعبة
               </p>
             </div>
-          </motion.div>
+          </div>
         )}
       </div>
 
       {/* CSS للـ animation */}
-      <style jsx>{`
+      <style>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
         @keyframes spin-slow {
           from {
             transform: rotate(0deg);
@@ -542,3 +472,5 @@ export default function YouTubeGunDuelOverlay() {
     </div>
   );
 }
+
+export default YouTubeGunDuelOverlay;
