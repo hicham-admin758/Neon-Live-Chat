@@ -72,7 +72,11 @@ export function GameCircle() {
 
     socket.on("bomb_tick", ({ seconds }) => {
       setTimeLeft(seconds);
-      if (seconds <= 5) playSound("tick");
+      if (seconds <= 5) {
+        playSound("tick");
+      } else if (seconds <= 10 && seconds % 2 === 0) {
+        playSound("tick");
+      }
     });
 
     socket.on("player_eliminated", ({ playerId }) => {
@@ -262,11 +266,13 @@ export function GameCircle() {
             return (
               <div
                 key={user.id}
-                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-500
+                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-1000 ease-in-out
                   ${isExploding ? "scale-150 z-50" : "hover:scale-110 z-10"}
+                  animate-float
                 `}
                 style={{ 
                   transform: `translate(${x}px, ${y}px) translate(-50%, -50%)`,
+                  animationDelay: `${index * 0.2}s`
                 }}
               >
                 <div className="flex flex-col items-center gap-2 relative">
