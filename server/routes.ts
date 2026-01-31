@@ -230,6 +230,10 @@ export async function registerRoutes(
           if (active.length === 1) {
             const winner = active[0];
             currentBombHolderId = null;
+            if (bombTimer) {
+              clearInterval(bombTimer);
+              bombTimer = null;
+            }
             io.emit("game_winner", winner);
             
             setTimeout(async () => {

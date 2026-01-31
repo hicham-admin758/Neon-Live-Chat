@@ -93,6 +93,7 @@ export function GameCircle() {
       playSound("victory");
       setWinner(winnerUser);
       setBombPlayerId(null);
+      setTimeLeft(30); // Reset timer on winner
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       
       // Auto-restart handling is already in backend, 
@@ -141,25 +142,41 @@ export function GameCircle() {
   // === شاشة الفوز ===
   if (winner) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] animate-in zoom-in duration-500">
-        <div className="relative mb-8">
-          <Trophy size={160} className="text-yellow-400 absolute -top-20 -left-20 -rotate-12 drop-shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-bounce" />
-          <div className="w-64 h-64 rounded-full border-8 border-yellow-400 overflow-hidden shadow-[0_0_50px_rgba(250,204,21,0.4)]">
+      <div className="flex flex-col items-center justify-center min-h-[70vh] animate-in zoom-in duration-700">
+        <div className="relative mb-12 group">
+          {/* Animated Glow Rings */}
+          <div className="absolute inset-0 rounded-full bg-yellow-400 blur-3xl opacity-30 animate-pulse group-hover:opacity-50 transition-opacity" />
+          <div className="absolute inset-0 rounded-full border-4 border-yellow-400/20 scale-125 animate-[ping_3s_linear_infinite]" />
+          
+          <Trophy size={180} className="text-yellow-400 absolute -top-24 -left-24 -rotate-12 drop-shadow-[0_0_40px_rgba(250,204,21,0.7)] animate-bounce z-20" />
+          
+          <div className="relative w-72 h-72 rounded-full border-[10px] border-yellow-400 overflow-hidden shadow-[0_0_60px_rgba(250,204,21,0.5)] z-10 bg-black/40 backdrop-blur-sm">
             {winner.avatarUrl ? (
-              <img src={winner.avatarUrl} alt={winner.username} className="w-full h-full object-cover scale-110" />
+              <img src={winner.avatarUrl} alt={winner.username} className="w-full h-full object-cover scale-110 group-hover:scale-125 transition-transform duration-700" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-800 text-white text-6xl font-black">
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-yellow-600 to-orange-700 text-white text-7xl font-black">
                 {winner.username.charAt(0)}
               </div>
             )}
           </div>
         </div>
-        <h2 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-300 mb-4 text-center">
-          {winner.username}
-        </h2>
-        <p className="text-4xl text-white/90 font-bold mb-8 tracking-widest">👑 بطل الساحة 👑</p>
-        <div className="bg-white/10 backdrop-blur-md px-6 py-2 rounded-full border border-white/20 animate-pulse">
-           <p className="text-white font-medium">تبدأ جولة جديدة خلال ثوانٍ...</p>
+        
+        <div className="text-center space-y-4">
+          <h2 className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-500 to-yellow-200 animate-gradient-x mb-2">
+            {winner.username}
+          </h2>
+          <div className="flex items-center justify-center gap-4">
+            <div className="h-px w-12 bg-gradient-to-r from-transparent to-yellow-400" />
+            <p className="text-4xl text-white font-black tracking-[0.2em] uppercase">Champion</p>
+            <div className="h-px w-12 bg-gradient-to-l from-transparent to-yellow-400" />
+          </div>
+        </div>
+
+        <div className="mt-12 bg-white/5 backdrop-blur-xl px-10 py-4 rounded-2xl border border-white/10 shadow-2xl animate-pulse">
+           <div className="flex items-center gap-3">
+             <RotateCcw className="text-cyan-400 animate-spin-slow" />
+             <p className="text-white/80 font-bold text-lg tracking-wide">تبدأ جولة جديدة تلقائياً...</p>
+           </div>
         </div>
       </div>
     );
