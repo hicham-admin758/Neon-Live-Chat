@@ -171,11 +171,19 @@ export function GameCircle() {
       
       {/* 💣 مؤقت القنبلة المركزي */}
       {bombPlayerId && (
-        <div className="absolute top-20 flex flex-col items-center z-50 animate-in fade-in slide-in-from-top-4">
-          <div className={`text-7xl font-black font-mono transition-colors duration-300 ${timeLeft <= 10 ? 'text-red-500 scale-110' : 'text-white'}`}>
-            {timeLeft}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center z-40 pointer-events-none">
+          <div className="relative flex items-center justify-center">
+            {/* Outer Glow Ring */}
+            <div className={`absolute w-40 h-40 rounded-full blur-2xl opacity-40 transition-colors duration-500 ${timeLeft <= 10 ? 'bg-red-500 animate-pulse' : 'bg-cyan-500'}`} />
+            
+            {/* Timer Display */}
+            <div className={`relative z-10 flex flex-col items-center justify-center w-36 h-36 rounded-full border-4 backdrop-blur-xl transition-all duration-300 ${timeLeft <= 10 ? 'border-red-500/50 bg-red-500/10 scale-110' : 'border-cyan-500/30 bg-black/40'}`}>
+              <div className={`text-6xl font-black font-mono leading-none transition-colors duration-300 ${timeLeft <= 10 ? 'text-red-500' : 'text-cyan-400'}`}>
+                {timeLeft}
+              </div>
+              <div className="text-[10px] text-white/40 font-bold uppercase tracking-[0.2em] mt-1">Seconds</div>
+            </div>
           </div>
-          <div className="text-white/40 text-sm font-bold uppercase tracking-widest mt-2">Seconds Left</div>
         </div>
       )}
 
@@ -250,16 +258,16 @@ export function GameCircle() {
                   <div className={`relative w-20 h-20 rounded-full border-4 shadow-2xl overflow-visible transition-all duration-300
                     ${isHoldingBomb ? "border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.6)] animate-pulse" : "border-white/20 bg-black"}
                   `}>
-                     {/* Badge ID */}
-                     <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-50">
-                        <span className="bg-cyan-400 text-black font-black text-lg px-2 py-0.5 rounded-md shadow-[0_0_10px_rgba(34,211,238,0.8)] border border-white">
+                    {/* Badge ID */}
+                    <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-50">
+                        <span className={`transition-all duration-300 font-black text-lg px-2 py-0.5 rounded-md shadow-lg border ${isHoldingBomb ? 'bg-red-500 text-white border-red-400 shadow-red-500/50' : 'bg-cyan-400 text-black border-white shadow-cyan-400/50'}`}>
                           #{user.id}
                         </span>
-                     </div>
+                    </div>
 
                     <div className="w-full h-full rounded-full overflow-hidden">
                       {user.avatarUrl ? (
-                        <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
+                        <img src={user.avatarUrl} alt={user.username} className={`w-full h-full object-cover transition-transform duration-500 ${isHoldingBomb ? 'scale-125' : 'hover:scale-110'}`} />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-gray-800 text-white">
                            <span className="font-bold text-2xl">{user.username.charAt(0)}</span>
@@ -268,8 +276,8 @@ export function GameCircle() {
                     </div>
 
                     {isHoldingBomb && (
-                      <div className="absolute -top-8 -right-8 z-50 animate-bounce">
-                        <Bomb size={48} className="text-red-500 fill-red-600 drop-shadow-2xl" />
+                      <div className="absolute -top-10 -right-10 z-50 animate-bounce">
+                        <Bomb size={56} className="text-red-500 fill-red-600 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
                       </div>
                     )}
 
@@ -282,8 +290,8 @@ export function GameCircle() {
                   </div>
 
                   {/* Name Tag */}
-                  <div className="bg-black/80 backdrop-blur-md px-3 py-1 rounded-lg border border-white/20 max-w-[140px]">
-                    <p className="text-white font-bold text-sm truncate text-center dir-rtl">
+                  <div className={`backdrop-blur-md px-3 py-1 rounded-lg border max-w-[140px] transition-all duration-300 ${isHoldingBomb ? 'bg-red-500/20 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-black/80 border-white/20'}`}>
+                    <p className={`font-bold text-sm truncate text-center dir-rtl transition-colors duration-300 ${isHoldingBomb ? 'text-red-400' : 'text-white'}`}>
                       {user.username}
                     </p>
                   </div>
