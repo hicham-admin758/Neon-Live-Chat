@@ -130,10 +130,11 @@ export function GameCircle() {
 
   const getRadius = () => {
     const count = activePlayers.length;
-    if (count <= 5) return 140;
-    if (count <= 10) return 190;
-    if (count <= 15) return 240;
-    return 300;
+    // Dynamic radius based on player count, but capped for computer screens
+    const baseRadius = Math.min(window.innerWidth * 0.35, window.innerHeight * 0.35);
+    if (count <= 5) return baseRadius * 0.8;
+    if (count <= 10) return baseRadius;
+    return baseRadius * 1.2;
   };
 
   const radius = getRadius();
@@ -190,19 +191,19 @@ export function GameCircle() {
   return (
     <div className="w-full flex flex-col items-center relative min-h-[80vh]">
       
-      {/* 💣 مؤقت القنبلة المركزي */}
+      {/* 💣 مؤقت القنبلة المركزي - Perfectly Centered and Stable */}
       {bombPlayerId && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center z-40 pointer-events-none">
           <div className="relative flex items-center justify-center">
             {/* Outer Glow Ring */}
-            <div className={`absolute w-40 h-40 rounded-full blur-2xl opacity-40 transition-colors duration-500 ${timeLeft <= 10 ? 'bg-red-500 animate-pulse' : 'bg-cyan-500'}`} />
+            <div className={`absolute w-32 h-32 md:w-40 md:h-40 rounded-full blur-2xl opacity-40 transition-colors duration-500 ${timeLeft <= 10 ? 'bg-red-500 animate-pulse' : 'bg-cyan-500'}`} />
             
             {/* Timer Display */}
-            <div className={`relative z-10 flex flex-col items-center justify-center w-36 h-36 rounded-full border-4 backdrop-blur-xl transition-all duration-300 ${timeLeft <= 10 ? 'border-red-500/50 bg-red-500/10 scale-110' : 'border-cyan-500/30 bg-black/40'}`}>
-              <div className={`text-6xl font-black font-mono leading-none transition-colors duration-300 ${timeLeft <= 10 ? 'text-red-500' : 'text-cyan-400'}`}>
+            <div className={`relative z-10 flex flex-col items-center justify-center w-28 h-28 md:w-36 md:h-36 rounded-full border-4 backdrop-blur-xl transition-all duration-300 ${timeLeft <= 10 ? 'border-red-500/50 bg-red-500/10 scale-110' : 'border-cyan-500/30 bg-black/40'}`}>
+              <div className={`text-4xl md:text-6xl font-black font-mono leading-none transition-colors duration-300 ${timeLeft <= 10 ? 'text-red-500' : 'text-cyan-400'}`}>
                 {timeLeft}
               </div>
-              <div className="text-[10px] text-white/40 font-bold uppercase tracking-[0.2em] mt-1">Seconds</div>
+              <div className="text-[8px] md:text-[10px] text-white/40 font-bold uppercase tracking-[0.2em] mt-1">Seconds</div>
             </div>
           </div>
         </div>
@@ -267,7 +268,7 @@ export function GameCircle() {
               <div
                 key={user.id}
                 className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-1000 ease-in-out
-                  ${isExploding ? "scale-150 z-50" : "hover:scale-110 z-10"}
+                  ${isExploding ? "scale-150 z-50" : "hover:scale-105 z-10"}
                   animate-float
                 `}
                 style={{ 
@@ -278,8 +279,8 @@ export function GameCircle() {
                 <div className="flex flex-col items-center gap-2 relative">
 
                   {/* Avatar Circle */}
-                  <div className={`relative w-20 h-20 rounded-full border-4 shadow-2xl overflow-visible transition-all duration-300
-                    ${isHoldingBomb ? "border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.6)] animate-pulse" : "border-white/20 bg-black"}
+                  <div className={`relative w-14 h-14 md:w-20 md:h-20 rounded-full border-4 shadow-2xl overflow-visible transition-all duration-300
+                    ${isHoldingBomb ? "border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.6)] animate-pulse scale-110" : "border-white/20 bg-black"}
                   `}>
                     {/* Badge ID */}
                     <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-50">
@@ -299,8 +300,8 @@ export function GameCircle() {
                     </div>
 
                     {isHoldingBomb && (
-                      <div className="absolute -top-10 -right-10 z-50 animate-bounce">
-                        <Bomb size={56} className="text-red-500 fill-red-600 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
+                      <div className="absolute -bottom-6 -right-6 z-50 animate-bounce">
+                        <Bomb size={48} className="text-red-500 fill-red-600 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
                       </div>
                     )}
 
