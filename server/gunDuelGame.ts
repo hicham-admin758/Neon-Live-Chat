@@ -2,35 +2,26 @@
 import { Server, Socket } from 'socket.io';
 
 interface Player {
-  id: number;
+  id: string;
   username: string;
   avatarUrl?: string;
   socketId: string;
-  position?: 'left' | 'right';
-  isAlive: boolean;
 }
 
 interface GameSession {
-  leftPlayer: Player | null;
-  rightPlayer: Player | null;
-  targetNumber: number | null;
-  isActive: boolean;
-  countdownTimer: NodeJS.Timeout | null;
-  targetTimer: NodeJS.Timeout | null;
+  player1: Player;
+  player2: Player;
+  targetNumber: number;
+  startTime: number;
+  countdown: NodeJS.Timeout | null;
+  numberRevealTimeout: NodeJS.Timeout | null;
 }
 
-export class GunDuelGameManager {
+class GunDuelGameServer {
   private io: Server;
-  private waitingQueue: Player[] = [];
-  private currentGame: GameSession = {
-    leftPlayer: null,
-    rightPlayer: null,
-    targetNumber: null,
-    isActive: false,
-    countdownTimer: null,
-    targetTimer: null
-  };
-  private chatMessageHandler: ((socket: Socket, message: string) => void) | null = null;
+  private waitingPlayers: Player[] = [];
+  private currentGame: GameSession | null = null;
+  private chatMessages: Array<{ username: string; message: string; timestamp: number }> = [];
 
   constructor(io: Server) {
     this.io = io;
@@ -39,396 +30,335 @@ export class GunDuelGameManager {
 
   private setupSocketHandlers() {
     this.io.on('connection', (socket: Socket) => {
-      console.log(`🎮 Player connected: ${socket.id}`);
+      console.log('🎮 لاعب متصل:', socket.id);
 
-      // 🎯 انضمام لاعب لقائمة الانتظار
-      socket.on('join_queue', async () => {
-        try {
-          // الحصول على بيانات اللاعب من قاعدة البيانات
-          const playerData = await this.getPlayerFromSocket(socket);
-          
-          if (!playerData) {
-            socket.emit('error', { message: 'لم يتم العثور على بيانات اللاعب' });
-            return;
-          }
+      // إرسال معلومات المستخدم (يمكن دمجها مع نظام المصادقة الخاص بك)
+      const currentUser: Player = {
+        id: socket.id,
+        username: `Player_${Math.floor(Math.random() * 1000)}`,
+        socketId: socket.id
+      };
 
-          // التحقق من عدم وجوده مسبقاً
-          const alreadyInQueue = this.waitingQueue.some(p => p.id === playerData.id);
-          if (alreadyInQueue) {
-            socket.emit('error', { message: 'أنت بالفعل في قائمة الانتظار' });
-            return;
-          }
+      socket.emit('current-user', currentUser);
 
-          // إضافة للقائمة
-          this.waitingQueue.push(playerData);
-          
-          // إرسال تحديث لجميع المتصلين
-          this.io.emit('players_waiting', { count: this.waitingQueue.length });
+      // إرسال قائمة المنتظرين الحالية
+      this.broadcastWaitingPlayers();
 
-          console.log(`✅ ${playerData.username} انضم لقائمة الانتظار (${this.waitingQueue.length} لاعبين)`);
+      // إرسال رسائل الشات السابقة
+      socket.emit('chat-history', this.chatMessages.slice(-50)); // آخر 50 رسالة
 
-          // إذا كان هناك لاعبان أو أكثر، ابدأ اللعبة
-          if (this.waitingQueue.length >= 2 && !this.currentGame.isActive) {
-            setTimeout(() => this.startGame(), 2000);
-          }
-        } catch (error) {
-          console.error('خطأ في join_queue:', error);
-          socket.emit('error', { message: 'حدث خطأ أثناء الانضمام' });
+      // استقبال رسائل الشات
+      socket.on('send-chat-message', (message: string) => {
+        const chatMessage = {
+          username: currentUser.username,
+          message: message,
+          timestamp: Date.now()
+        };
+
+        this.chatMessages.push(chatMessage);
+
+        // بث الرسالة لجميع المتصلين
+        this.io.emit('chat-message', chatMessage);
+
+        // التحقق إذا كانت الرسالة "دخول" للانضمام للعبة
+        if (message.trim() === 'دخول') {
+          this.handleJoinDuel(socket, currentUser);
         }
       });
 
-      // 🔄 إعادة تعيين اللعبة
-      socket.on('reset_game', () => {
-        this.resetGame();
+      // الانضمام للعبة عبر الزر
+      socket.on('join-duel', () => {
+        this.handleJoinDuel(socket, currentUser);
       });
 
-      // 💬 معالجة رسائل الشات (يتم ربطها من الخارج)
-      socket.on('chat_message', (message: string) => {
-        if (this.chatMessageHandler) {
-          this.chatMessageHandler(socket, message);
-        }
+      // إرسال الرقم
+      socket.on('submit-number', (number: number) => {
+        this.handleNumberSubmit(socket, currentUser, number);
       });
 
-      // 🚪 عند مغادرة اللاعب
+      // قطع الاتصال
       socket.on('disconnect', () => {
-        this.handlePlayerDisconnect(socket);
+        console.log('❌ لاعب انقطع:', socket.id);
+
+        // إزالة من قائمة الانتظار
+        this.waitingPlayers = this.waitingPlayers.filter(p => p.socketId !== socket.id);
+        this.broadcastWaitingPlayers();
+
+        // إلغاء اللعبة الحالية إذا كان أحد اللاعبين
+        if (this.currentGame) {
+          if (this.currentGame.player1.socketId === socket.id || 
+              this.currentGame.player2.socketId === socket.id) {
+            this.cancelCurrentGame();
+          }
+        }
       });
     });
   }
 
-  // 🎮 بدء اللعبة
-  private async startGame() {
-    if (this.waitingQueue.length < 2) {
-      console.log('⚠️ لا يوجد لاعبان كافيان');
+  private handleJoinDuel(socket: Socket, player: Player) {
+    // التحقق من عدم وجوده في قائمة الانتظار
+    if (this.waitingPlayers.some(p => p.socketId === socket.id)) {
+      socket.emit('error', { message: 'أنت بالفعل في قائمة الانتظار' });
       return;
     }
 
-    if (this.currentGame.isActive) {
-      console.log('⚠️ اللعبة قيد التشغيل بالفعل');
+    // التحقق من عدم وجود لعبة حالية
+    if (this.currentGame) {
+      socket.emit('error', { message: 'هناك لعبة قائمة حالياً، انتظر انتهائها' });
       return;
     }
 
-    // اختيار لاعبين عشوائياً
-    const shuffled = [...this.waitingQueue].sort(() => Math.random() - 0.5);
-    const leftPlayer = { ...shuffled[0], position: 'left' as const, isAlive: true };
-    const rightPlayer = { ...shuffled[1], position: 'right' as const, isAlive: true };
+    // إضافة للقائمة
+    this.waitingPlayers.push(player);
+    this.broadcastWaitingPlayers();
 
-    // إزالتهم من قائمة الانتظار
-    this.waitingQueue = this.waitingQueue.filter(
-      p => p.id !== leftPlayer.id && p.id !== rightPlayer.id
-    );
+    console.log(`✅ ${player.username} انضم للانتظار`);
 
-    // تحديث حالة اللعبة
+    // إذا أصبح لدينا لاعبان، ابدأ اللعبة
+    if (this.waitingPlayers.length >= 2) {
+      this.startGame();
+    }
+  }
+
+  private startGame() {
+    if (this.waitingPlayers.length < 2) return;
+
+    // اختيار أول لاعبين
+    const player1 = this.waitingPlayers.shift()!;
+    const player2 = this.waitingPlayers.shift()!;
+
+    // إنشاء رقم عشوائي (من 0 إلى 99)
+    const targetNumber = Math.floor(Math.random() * 100);
+
     this.currentGame = {
-      leftPlayer,
-      rightPlayer,
-      targetNumber: null,
-      isActive: true,
-      countdownTimer: null,
-      targetTimer: null
+      player1,
+      player2,
+      targetNumber,
+      startTime: Date.now(),
+      countdown: null,
+      numberRevealTimeout: null
     };
 
-    console.log(`🎮 بدء مبارزة: ${leftPlayer.username} vs ${rightPlayer.username}`);
+    console.log(`🎮 بدأت اللعبة: ${player1.username} ضد ${player2.username}`);
 
     // إرسال بداية اللعبة لجميع المتصلين
-    this.io.emit('game_started', {
-      leftPlayer: this.getPublicPlayerData(leftPlayer),
-      rightPlayer: this.getPublicPlayerData(rightPlayer)
+    this.io.emit('game-started', {
+      player1: {
+        id: player1.id,
+        username: player1.username,
+        avatarUrl: player1.avatarUrl
+      },
+      player2: {
+        id: player2.id,
+        username: player2.username,
+        avatarUrl: player2.avatarUrl
+      }
     });
+
+    // بث رسالة في الشات
+    const gameStartMessage = {
+      username: 'النظام',
+      message: `🎮 بدأت مبارزة بين ${player1.username} و ${player2.username}!`,
+      timestamp: Date.now()
+    };
+    this.chatMessages.push(gameStartMessage);
+    this.io.emit('chat-message', gameStartMessage);
 
     // بدء العد التنازلي
     this.startCountdown();
   }
 
-  // ⏱️ العد التنازلي
   private startCountdown() {
-    let countdown = 10;
+    if (!this.currentGame) return;
 
-    this.currentGame.countdownTimer = setInterval(() => {
-      this.io.emit('countdown_tick', { seconds: countdown });
-      countdown--;
+    let seconds = 10;
 
-      if (countdown < 0) {
-        if (this.currentGame.countdownTimer) {
-          clearInterval(this.currentGame.countdownTimer);
-          this.currentGame.countdownTimer = null;
+    // إرسال أول تحديث
+    this.io.emit('countdown-tick', seconds);
+
+    this.currentGame.countdown = setInterval(() => {
+      seconds--;
+
+      if (seconds > 0) {
+        this.io.emit('countdown-tick', seconds);
+      } else {
+        // انتهى العد التنازلي، أظهر الرقم
+        if (this.currentGame?.countdown) {
+          clearInterval(this.currentGame.countdown);
+          this.currentGame.countdown = null;
         }
-        this.showTarget();
+        this.revealNumber();
       }
     }, 1000);
   }
 
-  // 🎯 عرض الرقم المستهدف
-  private showTarget() {
-    // توليد رقم عشوائي من 10 إلى 99
-    const targetNumber = Math.floor(Math.random() * 90) + 10;
-    this.currentGame.targetNumber = targetNumber;
+  private revealNumber() {
+    if (!this.currentGame) return;
 
-    console.log(`🎯 الرقم المستهدف: ${targetNumber}`);
+    console.log(`🎯 تم الكشف عن الرقم: ${this.currentGame.targetNumber}`);
 
     // إرسال الرقم لجميع المتصلين
-    this.io.emit('show_target', { number: targetNumber });
+    this.io.emit('number-revealed', this.currentGame.targetNumber);
 
-    // الآن يجب مراقبة رسائل الشات
-    this.setupChatMonitoring();
-  }
-
-  // 💬 مراقبة رسائل الشات
-  private setupChatMonitoring() {
-    this.chatMessageHandler = (socket: Socket, message: string) => {
-      // إذا انتهت اللعبة، تجاهل
-      if (!this.currentGame.isActive || !this.currentGame.targetNumber) {
-        return;
-      }
-
-      // الحصول على بيانات اللاعب
-      const player = this.getPlayerBySocketId(socket.id);
-      if (!player) return;
-
-      // التحقق من أن اللاعب في اللعبة الحالية
-      if (
-        this.currentGame.leftPlayer?.id !== player.id && 
-        this.currentGame.rightPlayer?.id !== player.id
-      ) {
-        return;
-      }
-
-      // التحقق من الرسالة
-      const trimmedMessage = message.trim();
-      
-      if (trimmedMessage === this.currentGame.targetNumber.toString()) {
-        // اللاعب كتب الرقم الصحيح!
-        this.handleCorrectAnswer(player);
-      }
+    // رسالة في الشات
+    const numberMessage = {
+      username: 'النظام',
+      message: `🎯 ظهر الرقم! من سيكون الأسرع؟`,
+      timestamp: Date.now()
     };
+    this.chatMessages.push(numberMessage);
+    this.io.emit('chat-message', numberMessage);
   }
 
-  // ✅ معالجة الإجابة الصحيحة
-  private handleCorrectAnswer(winner: Player) {
-    if (!this.currentGame.leftPlayer || !this.currentGame.rightPlayer) {
+  private handleNumberSubmit(socket: Socket, player: Player, number: number) {
+    if (!this.currentGame) return;
+
+    // التحقق من أن اللاعب في اللعبة
+    const isPlayer1 = this.currentGame.player1.socketId === socket.id;
+    const isPlayer2 = this.currentGame.player2.socketId === socket.id;
+
+    if (!isPlayer1 && !isPlayer2) {
+      socket.emit('error', { message: 'أنت لست في اللعبة الحالية' });
       return;
     }
 
-    const victim = winner.id === this.currentGame.leftPlayer.id 
-      ? this.currentGame.rightPlayer 
-      : this.currentGame.leftPlayer;
+    // التحقق من صحة الرقم
+    if (number === this.currentGame.targetNumber) {
+      // فاز اللاعب!
+      const winner = isPlayer1 ? this.currentGame.player1 : this.currentGame.player2;
+      const loser = isPlayer1 ? this.currentGame.player2 : this.currentGame.player1;
+      const shootDirection = isPlayer1 ? 'right' : 'left';
 
-    console.log(`💥 ${winner.username} أطلق النار على ${victim.username}!`);
+      console.log(`🏆 ${winner.username} فاز!`);
 
-    // إرسال حدث إطلاق النار
-    this.io.emit('shot_fired', {
-      shooter: this.getPublicPlayerData(winner),
-      victim: this.getPublicPlayerData(victim)
-    });
+      // إرسال نتيجة اللعبة
+      this.io.emit('game-finished', {
+        winner: {
+          id: winner.id,
+          username: winner.username,
+          avatarUrl: winner.avatarUrl
+        },
+        loser: {
+          id: loser.id,
+          username: loser.username,
+          avatarUrl: loser.avatarUrl
+        },
+        shootDirection
+      });
 
-    // تحديث حالة اللعبة
-    this.currentGame.isActive = false;
-    this.chatMessageHandler = null;
+      // رسالة في الشات
+      const winMessage = {
+        username: 'النظام',
+        message: `🏆 ${winner.username} فاز بالمبارزة! 🎉`,
+        timestamp: Date.now()
+      };
+      this.chatMessages.push(winMessage);
+      this.io.emit('chat-message', winMessage);
 
-    // مسح أي مؤقتات
-    if (this.currentGame.countdownTimer) {
-      clearInterval(this.currentGame.countdownTimer);
-    }
-    if (this.currentGame.targetTimer) {
-      clearTimeout(this.currentGame.targetTimer);
+      // تنظيف اللعبة
+      this.cleanupCurrentGame();
+
+      // إذا كان هناك لاعبون في الانتظار، ابدأ لعبة جديدة بعد 7 ثوان
+      setTimeout(() => {
+        if (this.waitingPlayers.length >= 2) {
+          this.startGame();
+        }
+      }, 7000);
+
+    } else {
+      // رقم خاطئ
+      socket.emit('error', { message: `❌ رقم خاطئ! الرقم الصحيح: ${this.currentGame.targetNumber}` });
     }
   }
 
-  // 🔄 إعادة تعيين اللعبة
-  public resetGame() {
-    console.log('🔄 إعادة تعيين اللعبة');
+  private cancelCurrentGame() {
+    if (!this.currentGame) return;
 
-    // مسح المؤقتات
-    if (this.currentGame.countdownTimer) {
-      clearInterval(this.currentGame.countdownTimer);
+    console.log('⚠️ تم إلغاء اللعبة الحالية');
+
+    // تنظيف المؤقتات
+    if (this.currentGame.countdown) {
+      clearInterval(this.currentGame.countdown);
     }
-    if (this.currentGame.targetTimer) {
-      clearTimeout(this.currentGame.targetTimer);
+    if (this.currentGame.numberRevealTimeout) {
+      clearTimeout(this.currentGame.numberRevealTimeout);
     }
+
+    // إرسال رسالة الإلغاء
+    const cancelMessage = {
+      username: 'النظام',
+      message: '⚠️ تم إلغاء اللعبة بسبب انقطاع أحد اللاعبين',
+      timestamp: Date.now()
+    };
+    this.chatMessages.push(cancelMessage);
+    this.io.emit('chat-message', cancelMessage);
+
+    this.currentGame = null;
 
     // إعادة تعيين الحالة
-    this.currentGame = {
-      leftPlayer: null,
-      rightPlayer: null,
-      targetNumber: null,
-      isActive: false,
-      countdownTimer: null,
-      targetTimer: null
-    };
-
-    this.chatMessageHandler = null;
-    this.waitingQueue = [];
-
-    // إرسال حدث إعادة التعيين
-    this.io.emit('game_reset');
-    this.io.emit('players_waiting', { count: 0 });
+    this.io.emit('game-reset');
   }
 
-  // 🚪 معالجة مغادرة اللاعب
-  private handlePlayerDisconnect(socket: Socket) {
-    console.log(`🚪 Player disconnected: ${socket.id}`);
+  private cleanupCurrentGame() {
+    if (!this.currentGame) return;
 
-    // إزالة من قائمة الانتظار
-    const queueIndex = this.waitingQueue.findIndex(p => p.socketId === socket.id);
-    if (queueIndex !== -1) {
-      const player = this.waitingQueue[queueIndex];
-      this.waitingQueue.splice(queueIndex, 1);
-      console.log(`❌ ${player.username} غادر قائمة الانتظار`);
-      this.io.emit('players_waiting', { count: this.waitingQueue.length });
+    if (this.currentGame.countdown) {
+      clearInterval(this.currentGame.countdown);
+    }
+    if (this.currentGame.numberRevealTimeout) {
+      clearTimeout(this.currentGame.numberRevealTimeout);
     }
 
-    // إذا كان في اللعبة الحالية
-    if (this.currentGame.isActive) {
-      if (
-        this.currentGame.leftPlayer?.socketId === socket.id ||
-        this.currentGame.rightPlayer?.socketId === socket.id
-      ) {
-        console.log('⚠️ لاعب في اللعبة النشطة غادر - إعادة تعيين اللعبة');
-        this.resetGame();
-      }
-    }
+    this.currentGame = null;
   }
 
-  // 🔍 الحصول على بيانات اللاعب من Socket
-  private async getPlayerFromSocket(socket: Socket): Promise<Player | null> {
-    try {
-      // هنا يمكنك الحصول على بيانات اللاعب من قاعدة البيانات
-      // مثال باستخدام session أو authentication token
-      
-      // للتجربة، سنستخدم بيانات وهمية:
-      const userId = (socket.handshake.query.userId as string) || socket.id;
-      const username = (socket.handshake.query.username as string) || `Player_${socket.id.substring(0, 5)}`;
-      const avatarUrl = socket.handshake.query.avatarUrl as string | undefined;
-
-      return {
-        id: parseInt(userId) || Math.floor(Math.random() * 1000000),
-        username,
-        avatarUrl,
-        socketId: socket.id,
-        isAlive: true
-      };
-    } catch (error) {
-      console.error('خطأ في getPlayerFromSocket:', error);
-      return null;
-    }
+  private broadcastWaitingPlayers() {
+    const playerNames = this.waitingPlayers.map(p => p.username);
+    this.io.emit('waiting-players-update', playerNames);
   }
 
-  // 🔍 الحصول على لاعب من Socket ID
-  private getPlayerBySocketId(socketId: string): Player | null {
-    if (this.currentGame.leftPlayer?.socketId === socketId) {
-      return this.currentGame.leftPlayer;
-    }
-    if (this.currentGame.rightPlayer?.socketId === socketId) {
-      return this.currentGame.rightPlayer;
-    }
-    return this.waitingQueue.find(p => p.socketId === socketId) || null;
-  }
-
-  // 📝 الحصول على البيانات العامة للاعب (بدون socketId)
-  private getPublicPlayerData(player: Player) {
+  // API للإحصائيات (اختياري)
+  public getStats() {
     return {
-      id: player.id,
-      username: player.username,
-      avatarUrl: player.avatarUrl,
-      position: player.position,
-      isAlive: player.isAlive
-    };
-  }
-
-  // 📊 الحصول على حالة اللعبة الحالية
-  public getGameState() {
-    return {
-      isActive: this.currentGame.isActive,
-      waitingCount: this.waitingQueue.length,
-      leftPlayer: this.currentGame.leftPlayer ? this.getPublicPlayerData(this.currentGame.leftPlayer) : null,
-      rightPlayer: this.currentGame.rightPlayer ? this.getPublicPlayerData(this.currentGame.rightPlayer) : null
-    };
-  }
-
-  // 💬 معالجة رسالة شات من الخارج (للتكامل مع نظام الشات الموجود)
-  public handleChatMessage(socketId: string, message: string) {
-    const socket = this.io.sockets.sockets.get(socketId);
-    if (socket && this.chatMessageHandler) {
-      this.chatMessageHandler(socket, message);
-    }
-  }
-
-  // 🧹 تنظيف الموارد
-  public cleanup() {
-    if (this.currentGame.countdownTimer) {
-      clearInterval(this.currentGame.countdownTimer);
-    }
-    if (this.currentGame.targetTimer) {
-      clearTimeout(this.currentGame.targetTimer);
-    }
-    this.waitingQueue = [];
-    this.currentGame = {
-      leftPlayer: null,
-      rightPlayer: null,
-      targetNumber: null,
-      isActive: false,
-      countdownTimer: null,
-      targetTimer: null
+      waitingPlayers: this.waitingPlayers.length,
+      hasActiveGame: this.currentGame !== null,
+      totalMessages: this.chatMessages.length
     };
   }
 }
 
-// ============================================
-// 📦 مثال على الاستخدام في Express + Socket.IO
-// ============================================
+export default GunDuelGameServer;
+
+
+// ========================
+// مثال الاستخدام في server.ts الرئيسي
+// ========================
 
 /*
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { GunDuelGameManager } from './gunDuelGame';
+import GunDuelGameServer from './gunDuelGame';
 
 const app = express();
-const server = createServer(app);
-const io = new Server(server, {
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
   }
 });
 
-// إنشاء مدير اللعبة
-const gameManager = new GunDuelGameManager(io);
+// تهيئة لعبة المبارزة
+const gunDuelGame = new GunDuelGameServer(io);
 
-// مثال على ربط رسائل الشات
-io.on('connection', (socket) => {
-  socket.on('send_message', (message: string) => {
-    // بث الرسالة لجميع المتصلين
-    io.emit('new_message', {
-      user: socket.id,
-      message
-    });
-    
-    // إرسال الرسالة لمدير اللعبة للتحقق
-    gameManager.handleChatMessage(socket.id, message);
-  });
-});
-
-// API للحصول على حالة اللعبة
-app.get('/api/game/status', (req, res) => {
-  res.json(gameManager.getGameState());
-});
-
-// API لإعادة تعيين اللعبة
-app.post('/api/game/reset', (req, res) => {
-  gameManager.resetGame();
-  res.json({ success: true });
+// API للإحصائيات (اختياري)
+app.get('/api/game/stats', (req, res) => {
+  res.json(gunDuelGame.getStats());
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-});
-
-// تنظيف عند الإغلاق
-process.on('SIGINT', () => {
-  gameManager.cleanup();
-  server.close();
-  process.exit(0);
 });
 */
