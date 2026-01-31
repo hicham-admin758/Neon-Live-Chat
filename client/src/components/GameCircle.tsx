@@ -130,11 +130,16 @@ export function GameCircle() {
 
   const getRadius = () => {
     const count = activePlayers.length;
-    // Dynamic radius based on player count, but capped for computer screens
-    const baseRadius = Math.min(window.innerWidth * 0.35, window.innerHeight * 0.35);
-    if (count <= 5) return baseRadius * 0.8;
-    if (count <= 10) return baseRadius;
-    return baseRadius * 1.2;
+    // baseRadius is derived from the smaller dimension of the container
+    // We'll use a fixed-ish size for the container to ensure it fits on screen
+    const baseRadius = 240; 
+    
+    // As count increases, we might need a slightly larger radius to prevent overlap,
+    // but we must cap it to prevent going off-screen.
+    if (count <= 5) return 150;
+    if (count <= 10) return 200;
+    if (count <= 20) return 250;
+    return 300;
   };
 
   const radius = getRadius();
@@ -234,7 +239,7 @@ export function GameCircle() {
       </div>
 
       {/* منطقة اللعب */}
-      <div className="relative flex items-center justify-center py-20 mt-10">
+      <div className="relative flex items-center justify-center min-h-[600px] w-full max-w-[800px] mx-auto mt-10 overflow-visible">
 
         {/* حالة الانتظار إذا لم يوجد لاعبين */}
         {activePlayers.length === 0 && (
@@ -247,7 +252,7 @@ export function GameCircle() {
         {/* الخلفية الدائرية */}
         <div 
           className="absolute rounded-full border-4 border-dashed border-white/10 animate-[spin_60s_linear_infinite]"
-          style={{ width: radius * 2.5, height: radius * 2.5 }}
+          style={{ width: radius * 2.2, height: radius * 2.2 }}
         />
 
         {/* حاوية اللاعبين */}
@@ -279,7 +284,7 @@ export function GameCircle() {
                 <div className="flex flex-col items-center gap-2 relative">
 
                   {/* Avatar Circle */}
-                  <div className={`relative w-14 h-14 md:w-20 md:h-20 rounded-full border-4 shadow-2xl overflow-visible transition-all duration-300
+                  <div className={`relative w-12 h-12 md:w-16 md:h-16 rounded-full border-4 shadow-2xl overflow-visible transition-all duration-300
                     ${isHoldingBomb ? "border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.6)] animate-pulse scale-110" : "border-white/20 bg-black"}
                   `}>
                     {/* Badge ID */}
