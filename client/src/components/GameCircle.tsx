@@ -83,7 +83,6 @@ export function GameCircle() {
       console.log(`💥 Eliminated: ${playerId}`);
       playSound("explosion");
       setExplodingId(playerId);
-
       setBombPlayerId(prev => prev === playerId ? null : prev);
 
       setTimeout(() => {
@@ -97,11 +96,9 @@ export function GameCircle() {
       playSound("victory");
       setWinner(winnerUser);
       setBombPlayerId(null);
-      setTimeLeft(30); // Reset timer on winner
+      setTimeLeft(30); 
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      
-      // Auto-restart handling is already in backend, 
-      // but we ensure UI reflects state after 5 seconds
+
       setTimeout(() => {
         setWinner(null);
         queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -125,101 +122,48 @@ export function GameCircle() {
     };
   }, [bombPlayerId]);
 
-  // حساب نصف القطر
+  // تصفية اللاعبين النشطين فقط
   const activePlayers = users?.filter(u => u.lobbyStatus === "active") || [];
 
+  // حساب نصف القطر ديناميكياً بناءً على عدد اللاعبين
   const getRadius = () => {
     const count = activePlayers.length;
-    // baseRadius is derived from the smaller dimension of the container
-    // We'll use a fixed-ish size for the container to ensure it fits on screen
-    const baseRadius = 240; 
-    
-    // As count increases, we might need a slightly larger radius to prevent overlap,
-    // but we must cap it to prevent going off-screen.
-    if (count <= 5) return 150;
-    if (count <= 10) return 200;
-    if (count <= 20) return 250;
-    return 300;
+    if (count <= 5) return 130;
+    if (count <= 10) return 180;
+    if (count <= 20) return 240;
+    return 280;
   };
 
   const radius = getRadius();
 
-  // === حالة التحميل ===
+  // === شاشة التحميل ===
   if (isLoading) {
-    return <div className="text-white text-center mt-20">جاري تحميل الساحة...</div>;
+    return <div className="text-white text-center mt-20 font-bold animate-pulse">جاري تحميل الساحة...</div>;
   }
 
   // === شاشة الفوز ===
   if (winner) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] animate-in zoom-in duration-700">
-        <div className="relative mb-12 group">
-          {/* Animated Glow Rings */}
-          <div className="absolute inset-0 rounded-full bg-yellow-400 blur-3xl opacity-30 animate-pulse group-hover:opacity-50 transition-opacity" />
-          <div className="absolute inset-0 rounded-full border-4 border-yellow-400/20 scale-125 animate-[ping_3s_linear_infinite]" />
-          
-          <Trophy size={180} className="text-yellow-400 absolute -top-24 -left-24 -rotate-12 drop-shadow-[0_0_40px_rgba(250,204,21,0.7)] animate-bounce z-20" />
-          
-          <div className="relative w-72 h-72 rounded-full border-[10px] border-yellow-400 overflow-hidden shadow-[0_0_60px_rgba(250,204,21,0.5)] z-10 bg-black/40 backdrop-blur-sm">
-            {winner.avatarUrl ? (
-              <img src={winner.avatarUrl} alt={winner.username} className="w-full h-full object-cover scale-110 group-hover:scale-125 transition-transform duration-700" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-yellow-600 to-orange-700 text-white text-7xl font-black">
-                {winner.username.charAt(0)}
-              </div>
-            )}
-          </div>
-        </div>
-        
-        <div className="text-center space-y-4">
-          <h2 className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-500 to-yellow-200 animate-gradient-x mb-2">
-            {winner.username}
-          </h2>
-          <div className="flex items-center justify-center gap-4">
-            <div className="h-px w-12 bg-gradient-to-r from-transparent to-yellow-400" />
-            <p className="text-4xl text-white font-black tracking-[0.2em] uppercase">Champion</p>
-            <div className="h-px w-12 bg-gradient-to-l from-transparent to-yellow-400" />
-          </div>
-        </div>
-
-        <div className="mt-12 bg-white/5 backdrop-blur-xl px-10 py-4 rounded-2xl border border-white/10 shadow-2xl animate-pulse">
-           <div className="flex items-center gap-3">
-             <RotateCcw className="text-cyan-400 animate-spin-slow" />
-             <p className="text-white/80 font-bold text-lg tracking-wide">تبدأ جولة جديدة تلقائياً...</p>
-           </div>
-        </div>
+        <Trophy size={180} className="text-yellow-400 drop-shadow-[0_0_40px_rgba(250,204,21,0.7)] animate-bounce mb-8" />
+        <h2 className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-500 to-yellow-200 mb-4">
+          {winner.username}
+        </h2>
+        <p className="text-4xl text-white font-black tracking-[0.2em] uppercase">الفائز!</p>
       </div>
     );
   }
 
   // === ساحة اللعب ===
   return (
-    <div className="w-full flex flex-col items-center relative min-h-[80vh]">
-      
-      {/* 💣 مؤقت القنبلة المركزي - Perfectly Centered and Stable */}
-      {bombPlayerId && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center justify-center z-40 pointer-events-none">
-          <div className="relative flex items-center justify-center">
-            {/* Outer Glow Ring */}
-            <div className={`absolute w-32 h-32 md:w-40 md:h-40 rounded-full blur-2xl opacity-40 transition-colors duration-500 ${timeLeft <= 10 ? 'bg-red-500 animate-pulse' : 'bg-cyan-500'}`} />
-            
-            {/* Timer Display */}
-            <div className={`relative z-10 flex flex-col items-center justify-center w-28 h-28 md:w-36 md:h-36 rounded-full border-4 backdrop-blur-xl transition-all duration-300 ${timeLeft <= 10 ? 'border-red-500/50 bg-red-500/10 scale-110' : 'border-cyan-500/30 bg-black/40'}`}>
-              <div className={`text-4xl md:text-6xl font-black font-mono leading-none transition-colors duration-300 ${timeLeft <= 10 ? 'text-red-500' : 'text-cyan-400'}`}>
-                {timeLeft}
-              </div>
-              <div className="text-[8px] md:text-[10px] text-white/40 font-bold uppercase tracking-[0.2em] mt-1">Seconds</div>
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="w-full flex flex-col items-center relative min-h-[80vh] overflow-hidden">
 
-      {/* 🎮 لوحة التحكم العلوية */}
-      <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-4 z-50 bg-black/50 backdrop-blur-md p-2 rounded-full border border-white/10">
+      {/* 🎮 أزرار التحكم العلوية */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex gap-4 z-50 bg-black/50 backdrop-blur-md p-2 rounded-full border border-white/10 shadow-lg">
         <Button 
           onClick={handleStartGame} 
           disabled={activePlayers.length < 2 || bombPlayerId !== null}
-          className="bg-green-600 hover:bg-green-700 text-white font-bold"
+          className="bg-green-600 hover:bg-green-700 text-white font-bold px-6"
         >
           <Play className="mr-2 h-4 w-4" /> ابدأ
         </Button>
@@ -227,7 +171,7 @@ export function GameCircle() {
         <Button 
           onClick={handleResetGame} 
           variant="destructive"
-          className="font-bold"
+          className="font-bold px-6"
         >
           <RotateCcw className="mr-2 h-4 w-4" /> إعادة
         </Button>
@@ -238,31 +182,36 @@ export function GameCircle() {
         </div>
       </div>
 
-      {/* منطقة اللعب */}
-      <div className="relative flex items-center justify-center min-h-[600px] w-full max-w-[800px] mx-auto mt-10 overflow-visible">
+      {/* منطقة اللعبة الرئيسية */}
+      <div className="relative flex items-center justify-center w-full h-[600px] mt-16">
 
-        {/* حالة الانتظار إذا لم يوجد لاعبين */}
-        {activePlayers.length === 0 && (
-          <div className="absolute text-center z-10">
-             <div className="animate-pulse text-white/50 text-xl font-bold">بانتظار انضمام اللاعبين...</div>
-             <p className="text-sm text-white/30 mt-2">اكتب "دخول" في شات اليوتيوب</p>
-          </div>
-        )}
-
-        {/* الخلفية الدائرية */}
+        {/* الخلفية الدائرية (زينة) */}
         <div 
-          className="absolute rounded-full border-4 border-dashed border-white/10 animate-[spin_60s_linear_infinite]"
-          style={{ width: radius * 2.2, height: radius * 2.2 }}
+          className="absolute rounded-full border-2 border-dashed border-white/10 animate-[spin_60s_linear_infinite]"
+          style={{ width: radius * 2.5, height: radius * 2.5 }}
         />
 
-        {/* حاوية اللاعبين */}
-        <div 
-          className="relative transition-all duration-1000 ease-out"
-          style={{ width: radius * 2, height: radius * 2 }}
-        >
+        {/* 💣 مؤقت القنبلة المركزي (ثابت في المنتصف) */}
+        <div className="absolute z-20 flex flex-col items-center justify-center pointer-events-none">
+          {bombPlayerId ? (
+            <div className={`relative flex items-center justify-center w-32 h-32 rounded-full border-4 backdrop-blur-xl transition-all duration-300 ${timeLeft <= 10 ? 'border-red-500 bg-red-500/10 scale-110 animate-pulse' : 'border-cyan-500/30 bg-black/40'}`}>
+              <div className={`text-6xl font-black font-mono leading-none ${timeLeft <= 10 ? 'text-red-500' : 'text-cyan-400'}`}>
+                {timeLeft}
+              </div>
+            </div>
+          ) : (
+            <div className="text-white/30 text-xl font-bold animate-pulse">انتظار...</div>
+          )}
+        </div>
+
+        {/* 👥 حاوية اللاعبين */}
+        <div className="absolute w-full h-full">
           {activePlayers.map((user, index) => {
             const total = activePlayers.length;
+            // حساب الزاوية: نبدأ من -90 درجة (الأعلى)
             const angle = (index / total) * 2 * Math.PI - Math.PI / 2;
+
+            // حساب الإحداثيات بالنسبة للمنتصف (بدون قيم ثابتة زائدة)
             const x = Math.cos(angle) * radius;
             const y = Math.sin(angle) * radius;
 
@@ -272,55 +221,60 @@ export function GameCircle() {
             return (
               <div
                 key={user.id}
-                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-all duration-1000 ease-in-out
-                  ${isExploding ? "scale-150 z-50" : "hover:scale-105 z-10"}
-                  animate-float
+                className={`absolute top-1/2 left-1/2 transition-all duration-700 ease-out
+                  ${isExploding ? "z-50" : "z-10"}
                 `}
                 style={{ 
-                  transform: `translate(${x}px, ${y}px) translate(-50%, -50%)`,
-                  animationDelay: `${index * 0.2}s`
+                  // ✅ الإصلاح الرئيسي هنا: نستخدم left/top مع calc لضمان التمركز الصحيح
+                  left: `calc(50% + ${x}px)`,
+                  top: `calc(50% + ${y}px)`,
+                  transform: 'translate(-50%, -50%)', // لتوسيط العنصر نفسه في نقطته
                 }}
               >
-                <div className="flex flex-col items-center gap-2 relative">
+                <div className="flex flex-col items-center gap-2 relative group">
 
-                  {/* Avatar Circle */}
-                  <div className={`relative w-12 h-12 md:w-16 md:h-16 rounded-full border-4 shadow-2xl overflow-visible transition-all duration-300
-                    ${isHoldingBomb ? "border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.6)] animate-pulse scale-110" : "border-white/20 bg-black"}
+                  {/* دائرة اللاعب (Avatar) */}
+                  <div className={`relative w-16 h-16 rounded-full border-4 shadow-xl overflow-visible transition-all duration-300
+                    ${isHoldingBomb ? "border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.6)] scale-125" : "border-white/20 bg-black hover:scale-110"}
                   `}>
-                    {/* Badge ID */}
-                    <div className="absolute -top-5 left-1/2 -translate-x-1/2 z-50">
-                        <span className={`transition-all duration-300 font-black text-lg px-2 py-0.5 rounded-md shadow-lg border ${isHoldingBomb ? 'bg-red-500 text-white border-red-400 shadow-red-500/50' : 'bg-cyan-400 text-black border-white shadow-cyan-400/50'}`}>
+
+                    {/* رقم اللاعب */}
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
+                        <span className="bg-cyan-900/80 text-cyan-200 text-xs font-bold px-2 py-0.5 rounded-full border border-cyan-500/30">
                           #{user.id}
                         </span>
                     </div>
 
-                    <div className="w-full h-full rounded-full overflow-hidden">
+                    {/* الصورة */}
+                    <div className="w-full h-full rounded-full overflow-hidden bg-gray-900">
                       {user.avatarUrl ? (
-                        <img src={user.avatarUrl} alt={user.username} className={`w-full h-full object-cover transition-transform duration-500 ${isHoldingBomb ? 'scale-125' : 'hover:scale-110'}`} />
+                        <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gray-800 text-white">
-                           <span className="font-bold text-2xl">{user.username.charAt(0)}</span>
+                        <div className="w-full h-full flex items-center justify-center text-white font-bold text-2xl">
+                           {user.username.charAt(0).toUpperCase()}
                         </div>
                       )}
                     </div>
 
+                    {/* أيقونة القنبلة إذا كانت معه */}
                     {isHoldingBomb && (
-                      <div className="absolute -bottom-6 -right-6 z-50 animate-bounce">
-                        <Bomb size={48} className="text-red-500 fill-red-600 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
+                      <div className="absolute -bottom-4 -right-4 z-30 animate-bounce">
+                        <Bomb size={40} className="text-red-500 fill-red-600 drop-shadow-lg" />
                       </div>
                     )}
 
+                    {/* تأثير الانفجار */}
                     {isExploding && (
-                      <div className="absolute inset-0 -m-10 flex items-center justify-center z-50 pointer-events-none">
-                         <Skull size={80} className="text-white animate-ping absolute" />
-                         <div className="w-40 h-40 bg-orange-500 rounded-full animate-ping opacity-75"></div>
+                      <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none scale-150">
+                         <Skull size={60} className="text-white animate-ping absolute" />
+                         <div className="w-32 h-32 bg-orange-600 rounded-full animate-ping opacity-75"></div>
                       </div>
                     )}
                   </div>
 
-                  {/* Name Tag */}
-                  <div className={`backdrop-blur-md px-3 py-1 rounded-lg border max-w-[140px] transition-all duration-300 ${isHoldingBomb ? 'bg-red-500/20 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-black/80 border-white/20'}`}>
-                    <p className={`font-bold text-sm truncate text-center dir-rtl transition-colors duration-300 ${isHoldingBomb ? 'text-red-400' : 'text-white'}`}>
+                  {/* اسم اللاعب */}
+                  <div className={`px-3 py-1 rounded-md backdrop-blur-sm transition-all duration-300 ${isHoldingBomb ? 'bg-red-900/50' : 'bg-black/60'}`}>
+                    <p className={`font-bold text-sm truncate max-w-[100px] text-center ${isHoldingBomb ? 'text-red-200' : 'text-gray-200'}`}>
                       {user.username}
                     </p>
                   </div>
