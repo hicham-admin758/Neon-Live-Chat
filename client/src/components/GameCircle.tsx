@@ -1,5 +1,5 @@
 import { useUsers } from "@/hooks/use-users";
-import { Bomb, Trophy, Skull, Play, RotateCcw, Crown } from "lucide-react";
+import { Bomb, Trophy, Skull, Play, RotateCcw, Users } from "lucide-react";
 import { useState, useEffect } from "react";
 import { io } from "socket.io-client";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -22,7 +22,6 @@ export function GameCircle() {
   const [explodingId, setExplodingId] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(30);
 
-  // تشغيل الأصوات
   const playSound = (type: keyof typeof SOUNDS) => {
     try {
       const audio = new Audio(SOUNDS[type]);
@@ -31,7 +30,6 @@ export function GameCircle() {
     } catch (e) {}
   };
 
-  // إعداد الـ Socket
   useEffect(() => {
     const socket = io(window.location.origin, { path: "/socket.io" });
 
@@ -60,12 +58,10 @@ export function GameCircle() {
       playSound("victory");
       setWinner(winnerUser);
       setBombPlayerId(null);
-
-      // ✅ التعديل المطلوب: الانتظار 8 ثواني
       setTimeout(() => {
         setWinner(null);
         queryClient.invalidateQueries({ queryKey: ["/api/users"] });
-      }, 8000);
+      }, 7000);
     });
 
     socket.on("game_reset", () => {
@@ -80,101 +76,66 @@ export function GameCircle() {
 
   const activePlayers = users?.filter(u => u.lobbyStatus === "active") || [];
 
-  // توسيع الدائرة لاستيعاب التصميم الجديد
-  const radius = activePlayers.length <= 5 ? 170 : activePlayers.length <= 10 ? 230 : 290;
+  // ضبط القطر بناءً على حجم الشاشة وعدد اللاعبين
+  const radius = activePlayers.length <= 5 ? 160 : activePlayers.length <= 12 ? 220 : 280;
 
-  if (isLoading) return <div className="text-white text-center mt-20 animate-pulse">جاري تحميل الساحة...</div>;
+  if (isLoading) return <div className="text-white text-center mt-20 animate-pulse">جاري التحميل...</div>;
 
-  // ✨ شاشة الفوز (تظهر لمدة 8 ثواني)
   if (winner) {
     return (
-      <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/95 backdrop-blur-xl animate-in zoom-in duration-700">
-        <div className="relative">
-           {/* توهج خلفي */}
-           <div className="absolute inset-0 bg-yellow-500/30 blur-[150px] animate-pulse"></div>
-
-           <Crown size={100} className="text-yellow-400 absolute -top-20 left-1/2 -translate-x-1/2 animate-bounce drop-shadow-[0_0_15px_rgba(250,204,21,0.8)]" />
-
-           <div className="relative w-72 h-72 rounded-full p-2 bg-gradient-to-b from-yellow-300 to-yellow-700 shadow-[0_0_60px_rgba(234,179,8,0.6)]">
-              <div className="w-full h-full rounded-full overflow-hidden border-4 border-black bg-black">
-                {winner.avatarUrl ? (
-                   <img src={winner.avatarUrl} className="w-full h-full object-cover" />
-                ) : (
-                   <div className="w-full h-full flex items-center justify-center bg-gray-900 text-8xl font-black text-yellow-500">
-                     {winner.username[0].toUpperCase()}
-                   </div>
-                )}
-              </div>
+      <div className="flex flex-col items-center justify-center min-h-[70vh] animate-in zoom-in duration-500">
+        <div className="relative p-8">
+           <div className="absolute inset-0 bg-yellow-500/20 blur-[120px] rounded-full animate-pulse"></div>
+           <Trophy size={140} className="text-yellow-400 drop-shadow-2xl mb-6 relative z-10" />
+           <div className="w-64 h-64 rounded-full border-8 border-yellow-500 shadow-2xl overflow-hidden relative z-10">
+              {winner.avatarUrl ? <img src={winner.avatarUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-yellow-600 flex items-center justify-center text-8xl font-black">{winner.username[0]}</div>}
            </div>
         </div>
-
-        <div className="mt-8 text-center space-y-4 relative z-10">
-          <h1 className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-500 to-yellow-200 drop-shadow-sm">
-            {winner.username}
-          </h1>
-          <div className="inline-block bg-yellow-500/20 px-8 py-2 rounded-full border border-yellow-500/50">
-            <p className="text-3xl text-white font-bold tracking-[0.3em] uppercase">الفائز الأسطوري 🏆</p>
-          </div>
-        </div>
+        <h1 className="text-6xl font-black text-yellow-400 mt-6">{winner.username}</h1>
+        <p className="text-2xl text-white font-bold tracking-tighter opacity-70">🏆 الفائز الأخير 🏆</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full flex flex-col items-center relative min-h-[90vh] justify-center overflow-hidden bg-[#0a0a0a]">
+    <div className="w-full flex flex-col items-center relative min-h-[85vh] justify-center overflow-hidden">
 
-      {/* 🎮 أزرار التحكم العلوية */}
-      <div className="absolute top-6 z-[100] flex items-center gap-4 bg-black/40 backdrop-blur-md p-3 rounded-2xl border border-white/10 shadow-2xl">
-        <Button onClick={() => apiRequest("POST", "/api/game/start-bomb")} className="bg-green-600 hover:bg-green-700 shadow-lg shadow-green-900/20 font-bold px-6">
-          <Play size={20} className="mr-2" /> ابدأ اللعب
+      {/* 🔘 أزرار التحكم */}
+      <div className="absolute top-4 flex gap-3 z-[100] bg-black/60 backdrop-blur-md p-2 rounded-2xl border border-white/20">
+        <Button onClick={() => apiRequest("POST", "/api/game/start-bomb")} className="bg-green-600 hover:bg-green-700 font-bold">
+          <Play size={18} className="ml-2" /> ابدأ
         </Button>
-        <Button onClick={() => apiRequest("POST", "/api/game/reset")} variant="destructive" className="font-bold px-6 shadow-lg shadow-red-900/20">
-          <RotateCcw size={20} className="mr-2" /> إعادة
+        <Button onClick={() => apiRequest("POST", "/api/game/reset")} variant="destructive" className="font-bold">
+          <RotateCcw size={18} className="ml-2" /> إعادة
         </Button>
-        <div className="bg-white/5 px-4 py-2 rounded-xl border border-white/10 flex items-center gap-2 text-white font-mono font-bold">
-          <Users size={18} className="text-cyan-400" />
-          <span>{activePlayers.length}</span>
-        </div>
       </div>
 
-      <div className="relative flex items-center justify-center w-full h-[800px]">
+      <div className="relative flex items-center justify-center w-full h-[700px]">
 
-        {/* ✨ الدائرة المنقطة (الخلفية) - تم تحسين الوضوح */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-           {/* الدائرة الخارجية المتحركة */}
-           <div 
-             className="rounded-full border-[3px] border-dashed border-cyan-500/20 animate-[spin_60s_linear_infinite]"
-             style={{ width: radius * 2.2, height: radius * 2.2 }}
-           />
-           {/* دائرة داخلية ثابتة للزينة */}
-           <div 
-             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/5"
-             style={{ width: radius * 1.8, height: radius * 1.8 }}
-           />
-        </div>
+        {/* ✨ الدائرة المنقطة المحسنة ✨ */}
+        <div 
+          className="absolute rounded-full border-[3px] border-dashed border-white/20 animate-[spin_100s_linear_infinite]"
+          style={{ width: radius * 2, height: radius * 2 }}
+        />
+        <div 
+          className="absolute rounded-full border border-cyan-500/10"
+          style={{ width: (radius * 2) + 40, height: (radius * 2) + 40 }}
+        />
 
-        {/* ⏲️ العداد المركزي (Timer) */}
-        <div className="absolute z-0 flex items-center justify-center">
+        {/* ⏲️ العداد المركزي */}
+        <div className="absolute z-10 flex flex-col items-center justify-center">
           {bombPlayerId ? (
-            <div className={`relative flex items-center justify-center w-40 h-40 rounded-full border-[6px] backdrop-blur-sm transition-all duration-300 
-              ${timeLeft <= 5 
-                ? 'border-red-600 bg-red-950/30 shadow-[0_0_50px_rgba(220,38,38,0.4)] scale-110 animate-pulse' 
-                : 'border-cyan-500/30 bg-black/40 shadow-[0_0_30px_rgba(6,182,212,0.1)]'}
-            `}>
-              <span className={`text-7xl font-black font-mono tracking-tighter ${timeLeft <= 5 ? 'text-red-500' : 'text-cyan-400'}`}>
+            <div className={`w-36 h-36 rounded-full flex items-center justify-center border-4 shadow-2xl transition-all duration-300 ${timeLeft <= 5 ? 'border-red-600 bg-red-600/20 scale-110 shadow-red-600/40' : 'border-cyan-500/40 bg-black/60 shadow-cyan-500/20'}`}>
+              <span className={`text-7xl font-black font-mono leading-none ${timeLeft <= 5 ? 'text-red-500' : 'text-cyan-400'}`}>
                 {timeLeft}
               </span>
             </div>
           ) : (
-            <div className="flex flex-col items-center opacity-40 animate-pulse">
-              <div className="w-32 h-32 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center">
-                 <span className="text-white font-bold">انتظار...</span>
-              </div>
-            </div>
+            <div className="text-white/20 font-bold text-xl uppercase tracking-widest animate-pulse">في انتظار البداية</div>
           )}
         </div>
 
-        {/* 👥 منطقة اللاعبين */}
+        {/* 👥 توزيع اللاعبين */}
         <div className="relative w-full h-full">
           {activePlayers.map((user, index) => {
             const angle = (index / activePlayers.length) * 2 * Math.PI - Math.PI / 2;
@@ -185,7 +146,7 @@ export function GameCircle() {
             return (
               <div
                 key={user.id}
-                className="absolute top-1/2 left-1/2 transition-all duration-500 ease-out"
+                className="absolute top-1/2 left-1/2 transition-all duration-700"
                 style={{ 
                   left: `calc(50% + ${x}px)`, 
                   top: `calc(50% + ${y}px)`, 
@@ -193,64 +154,48 @@ export function GameCircle() {
                   zIndex: isHoldingBomb ? 50 : 10
                 }}
               >
-                <div className="flex flex-col items-center relative group">
+                <div className="flex flex-col items-center gap-3 relative group">
 
-                  {/* 🔢 رقم اللاعب: تصميم جديد وعصري */}
+                  {/* 🔢 رقم اللاعب الضخم */}
                   <div className={`
-                    absolute -top-12 z-20 transition-all duration-300
-                    ${isHoldingBomb ? 'scale-125 -translate-y-2' : ''}
+                    absolute -top-10 px-4 py-1 rounded-xl border-2 font-black text-xl shadow-2xl transition-all
+                    ${isHoldingBomb ? 'bg-red-600 border-red-300 text-white scale-125' : 'bg-cyan-900 border-cyan-500 text-cyan-200'}
                   `}>
-                    <div className={`
-                      px-3 py-1 rounded-xl backdrop-blur-md border-2 shadow-lg flex flex-col items-center
-                      ${isHoldingBomb 
-                        ? 'bg-red-600/90 border-red-400 text-white shadow-red-600/50' 
-                        : 'bg-slate-900/80 border-cyan-500/30 text-cyan-400 shadow-cyan-900/50'}
-                    `}>
-                      <span className="text-[10px] uppercase font-bold opacity-70 leading-none mb-0.5">Player</span>
-                      <span className="text-xl font-black leading-none">#{user.id}</span>
-                    </div>
+                    #{user.id}
                   </div>
 
-                  {/* 🖼️ دائرة الأفاتار */}
+                  {/* 🖼️ صورة اللاعب */}
                   <div className={`
-                    relative w-24 h-24 rounded-full border-[4px] shadow-2xl transition-all duration-300
-                    ${isHoldingBomb 
-                      ? "border-red-500 shadow-[0_0_50px_rgba(239,68,68,0.6)] scale-110" 
-                      : "border-white/10 bg-black group-hover:border-white/30 group-hover:scale-105"}
+                    relative w-20 h-20 md:w-24 md:h-24 rounded-full border-4 transition-all duration-500
+                    ${isHoldingBomb ? "border-red-500 scale-110 shadow-[0_0_40px_rgba(239,68,68,0.8)]" : "border-white/30 bg-gray-900 shadow-xl group-hover:border-white/60"}
                   `}>
-                    <div className="w-full h-full rounded-full overflow-hidden bg-gray-900">
+                    <div className="w-full h-full rounded-full overflow-hidden">
                       {user.avatarUrl ? (
                         <img src={user.avatarUrl} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-white text-3xl font-bold bg-gradient-to-br from-gray-800 to-black">
+                        <div className="w-full h-full flex items-center justify-center text-white text-3xl font-bold bg-gradient-to-br from-gray-700 to-black">
                           {user.username[0].toUpperCase()}
                         </div>
                       )}
                     </div>
 
-                    {/* 💣 أيقونة القنبلة */}
+                    {/* القنبلة */}
                     {isHoldingBomb && (
-                      <div className="absolute -bottom-3 -right-3 z-30 animate-bounce">
-                        <Bomb size={50} className="text-red-500 fill-red-700 drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]" />
+                      <div className="absolute -bottom-2 -right-2 animate-bounce">
+                        <Bomb size={45} className="text-red-500 fill-black drop-shadow-[0_0_10px_rgba(255,0,0,1)]" />
                       </div>
                     )}
 
-                    {/* 💀 تأثير الانفجار */}
+                    {/* الانفجار */}
                     {explodingId === user.id && (
-                       <div className="absolute inset-0 z-[60] flex items-center justify-center">
-                         <div className="absolute inset-0 bg-red-600 rounded-full animate-ping"></div>
-                         <Skull size={60} className="text-white relative z-10 animate-spin" />
-                       </div>
+                      <div className="absolute inset-0 flex items-center justify-center bg-orange-600 rounded-full animate-ping scale-150 z-[60]">
+                         <Skull size={60} className="text-white" />
+                      </div>
                     )}
                   </div>
 
-                  {/* 🏷️ اسم اللاعب */}
-                  <div className={`
-                    mt-2 px-4 py-1.5 rounded-lg text-sm font-bold border backdrop-blur-md max-w-[140px] truncate text-center shadow-lg transition-colors
-                    ${isHoldingBomb 
-                      ? 'bg-red-950/80 text-red-100 border-red-500/50' 
-                      : 'bg-black/60 text-gray-300 border-white/5'}
-                  `}>
+                  {/* 🏷️ الاسم */}
+                  <div className={`px-4 py-1 rounded-full text-sm font-black border backdrop-blur-md ${isHoldingBomb ? 'bg-red-600 text-white border-red-400' : 'bg-black/80 text-gray-200 border-white/10'}`}>
                     {user.username}
                   </div>
 
