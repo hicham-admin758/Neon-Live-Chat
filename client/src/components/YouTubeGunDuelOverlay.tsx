@@ -1,4 +1,4 @@
-Import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Target, Trophy, Skull, Crown, Users } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
@@ -118,37 +118,106 @@ export default function YouTubeGunDuelOverlay() {
 
   const [waitingPlayers, setWaitingPlayers] = useState<WaitingPlayer[]>([]);
   const [shotFired, setShotFired] = useState<'left' | 'right' | null>(null);
+
+  // ✅ استخدام useRef للأصوات - تُنشأ مرة واحدة فقط
   const audioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 
-  // 🎵 إعداد الأصوات
+  // ✅ استخدام useRef لـ Socket - يمنع إعادة الإنشاء
+  const socketRef = useRef<Socket | null>(null);
+
+  // ✅ useRef لتتبع عدد اللاعبين السابق (للمقارنة)
+  const previousPlayerCountRef = useRef<number>(0);
+
+  // 🎵 إعداد الأصوات - مرة واحدة فقط
   useEffect(() => {
+    console.log("🎵 تهيئة الأصوات...");
     Object.entries(SOUNDS).forEach(([key, url]) => {
       const audio = new Audio(url);
       audio.volume = 0.6;
       audioRef.current.set(key, audio);
     });
-  }, []);
+
+    // التنظيف عند إزالة المكون
+    return () => {
+      console.log("🗑️ تنظيف الأصوات...");
+      audioRef.current.forEach(audio => {
+        audio.pause();
+        audio.src = '';
+      });
+      audioRef.current.clear();
+    };
+  }, []); // ✅ مصفوفة فارغة - مرة واحدة فقط
 
   const playSound = (key: keyof typeof SOUNDS) => {
     const audio = audioRef.current.get(key);
     if (audio) {
       audio.currentTime = 0;
-      audio.play().catch(() => {});
+      audio.play().catch(err => {
+        console.warn(`⚠️ فشل تشغيل الصوت ${key}:`, err);
+      });
     }
   };
 
-  // 🔌 الاتصال بالسيرفر
+  // 🔌 الاتصال بالسيرفر - مرة واحدة فقط
   useEffect(() => {
-    const socket = io({ path: "/socket.io", transports: ['websocket', 'polling'] });
+    console.log("🔌 بدء الاتصال بالسيرفر...");
 
-    // 1. تحديث قائمة الانتظار (Lobby)
+    // إنشاء اتصال Socket جديد
+    const socket = io({ 
+      path: "/socket.io", 
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
+    });
+
+    // حفظ في ref للوصول من أي مكان
+    socketRef.current = socket;
+
+    // عند الاتصال الناجح
+    socket.on("connect", () => {
+      console.log("✅ تم الاتصال بالسيرفر - Socket ID:", socket.id);
+
+      // ✅ طلب قائمة اللاعبين الموجودين فوراً عند الاتصال
+      socket.emit("get_waiting_players");
+    });
+
+    // عند فقدان الاتصال
+    socket.on("disconnect", (reason) => {
+      console.warn("❌ انقطع الاتصال:", reason);
+    });
+
+    // عند إعادة الاتصال
+    socket.on("reconnect", (attemptNumber) => {
+      console.log("🔄 إعادة الاتصال ناجحة بعد", attemptNumber, "محاولات");
+      // طلب البيانات مرة أخرى
+      socket.emit("get_waiting_players");
+    });
+
+    // 1. ✅ تحديث قائمة الانتظار (Lobby) - بدون تبعيات خارجية
     socket.on("players_waiting", ({ players }: { players: WaitingPlayer[] }) => {
+      console.log("📋 تحديث قائمة الانتظار:", players.length, "لاعبين");
+
+      // مقارنة مع العدد السابق من ref
+      const previousCount = previousPlayerCountRef.current;
+      const newCount = players.length;
+
+      // تشغيل صوت فقط عند زيادة عدد اللاعبين
+      if (newCount > previousCount) {
+        console.log("🎵 لاعب جديد انضم!");
+        playSound("playerJoin");
+      }
+
+      // تحديث العدد في ref
+      previousPlayerCountRef.current = newCount;
+
+      // تحديث الحالة
       setWaitingPlayers(players);
-      if (players.length > waitingPlayers.length) playSound("playerJoin");
     });
 
     // 2. بدء اللعبة (نقل اللاعبين من القائمة للساحة)
     socket.on("game_started", ({ leftPlayer, rightPlayer }) => {
+      console.log("🎮 بدء اللعبة:", leftPlayer.username, "vs", rightPlayer.username);
       setGameState({
         status: 'countdown',
         targetNumber: null,
@@ -162,17 +231,20 @@ export default function YouTubeGunDuelOverlay() {
 
     // 3. العد التنازلي
     socket.on("countdown_tick", ({ seconds }) => {
+      console.log("⏱️ العد التنازلي:", seconds);
       setGameState(prev => ({ ...prev, countdown: seconds }));
       if (seconds <= 3 && seconds > 0) playSound("countdown");
     });
 
     // 4. ظهور الهدف
     socket.on("show_target", ({ number }) => {
+      console.log("🎯 ظهور الهدف:", number);
       setGameState(prev => ({ ...prev, status: 'playing', targetNumber: number }));
     });
 
     // 5. إطلاق النار والنتيجة
     socket.on("shot_fired", ({ shooter, victim, responseTime }) => {
+      console.log("💥 إطلاق نار:", shooter.username, "→", victim.username, `(${responseTime}ms)`);
       setShotFired(shooter.position);
       playSound("gunshot");
 
@@ -191,19 +263,44 @@ export default function YouTubeGunDuelOverlay() {
 
     // 6. إعادة التعيين
     socket.on("game_reset", () => {
-      setGameState(prev => ({
-        ...prev,
+      console.log("🔄 إعادة تعيين اللعبة");
+      setGameState({
         status: 'waiting',
         targetNumber: null,
         winner: null,
         leftPlayer: null,
-        rightPlayer: null
-      }));
+        rightPlayer: null,
+        countdown: 10
+      });
       setShotFired(null);
     });
 
-    return () => { socket.disconnect(); };
-  }, [waitingPlayers.length]);
+    // 7. معالجة الأخطاء
+    socket.on("connect_error", (error) => {
+      console.error("❌ خطأ في الاتصال:", error);
+    });
+
+    // ✅ دالة التنظيف - إغلاق الاتصال عند إزالة المكون
+    return () => {
+      console.log("🛑 إغلاق اتصال Socket...");
+
+      // إزالة جميع المستمعين
+      socket.off("connect");
+      socket.off("disconnect");
+      socket.off("reconnect");
+      socket.off("players_waiting");
+      socket.off("game_started");
+      socket.off("countdown_tick");
+      socket.off("show_target");
+      socket.off("shot_fired");
+      socket.off("game_reset");
+      socket.off("connect_error");
+
+      // قطع الاتصال
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, []); // ✅ مصفوفة فارغة - الاتصال مرة واحدة فقط!
 
   return (
     <div className="w-full h-screen bg-transparent relative overflow-hidden font-sans select-none">
@@ -306,6 +403,7 @@ export default function YouTubeGunDuelOverlay() {
         @keyframes popIn { 0% { transform: scale(0); } 80% { transform: scale(1.1); } 100% { transform: scale(1); } }
         @keyframes slideUp { from { transform: translate(-50%, 100%); } to { transform: translate(-50%, 0); } }
         @keyframes zoomIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes fadeInDown { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         .mask-linear-fade { mask-image: linear-gradient(to right, black 85%, transparent 100%); }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
       `}</style>
