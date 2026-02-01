@@ -363,42 +363,68 @@ export function GameCircle() {
 
   // 🎮 الشاشة الرئيسية للعبة
   return (
-    <div className="w-full flex flex-col items-center relative min-h-screen justify-center overflow-hidden bg-gradient-to-br from-gray-900 via-black to-gray-900">
+    <div className="w-full flex flex-col items-center relative min-h-screen justify-center overflow-hidden bg-gradient-to-br from-black via-gray-900 to-black">
 
-      {/* 🎨 خلفية متحركة */}
-      <div className="absolute inset-0 overflow-hidden opacity-20">
-        <div className="absolute w-96 h-96 bg-cyan-500 rounded-full blur-[150px] -top-48 -left-48 animate-pulse"></div>
-        <div className="absolute w-96 h-96 bg-blue-500 rounded-full blur-[150px] -bottom-48 -right-48 animate-pulse delay-75"></div>
+      {/* 🎨 خلفية متحركة محسنة مع تأثيرات نيون */}
+      <div className="absolute inset-0 overflow-hidden">
+        {/* نجوم متحركة */}
+        {[...Array(30)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-1 h-1 bg-white rounded-full animate-pulse"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 3}s`,
+              animationDuration: `${2 + Math.random() * 3}s`
+            }}
+          />
+        ))}
+
+        {/* دوائر إضاءة نيون متحركة */}
+        <div className="absolute top-10 left-10 w-64 h-64 bg-cyan-500/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-20 right-20 w-80 h-80 bg-red-500/15 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute top-1/4 right-1/4 w-48 h-48 bg-orange-500/15 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '0.5s' }}></div>
+        <div className="absolute bottom-1/4 left-1/4 w-56 h-56 bg-blue-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1.5s' }}></div>
       </div>
 
-      {/* 🎛️ أزرار التحكم المحسنة */}
-      <div className="absolute top-6 left-1/2 -translate-x-1/2 flex gap-3 z-[100] bg-black/70 backdrop-blur-xl p-3 rounded-2xl border border-white/20 shadow-2xl">
+      {/* 🎛️ أزرار التحكم المحسنة مع تأثيرات نيون */}
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 flex gap-4 z-[100] bg-black/80 backdrop-blur-2xl p-4 rounded-3xl border border-white/20 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
         <Button 
           onClick={() => apiRequest("POST", "/api/game/start-bomb")} 
-          className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 font-bold shadow-lg transition-all hover:scale-105"
+          className="relative bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 font-bold shadow-[0_0_20px_rgba(34,197,94,0.5)] transition-all hover:scale-110 hover:shadow-[0_0_30px_rgba(34,197,94,0.8)] border border-green-400/50"
           disabled={isGameActive}
         >
-          <Play size={18} className="ml-2" /> ابدأ
+          <div className="absolute inset-0 bg-gradient-to-r from-green-400/20 to-green-600/20 rounded-md blur-sm"></div>
+          <Play size={18} className="ml-2 relative z-10" /> 
+          <span className="relative z-10">ابدأ</span>
         </Button>
 
         <Button 
           onClick={() => apiRequest("POST", "/api/game/reset")} 
-          className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 font-bold shadow-lg transition-all hover:scale-105"
+          className="relative bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 font-bold shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-all hover:scale-110 hover:shadow-[0_0_30px_rgba(239,68,68,0.8)] border border-red-400/50"
         >
-          <RotateCcw size={18} className="ml-2" /> إعادة
+          <div className="absolute inset-0 bg-gradient-to-r from-red-400/20 to-red-600/20 rounded-md blur-sm"></div>
+          <RotateCcw size={18} className="ml-2 relative z-10" /> 
+          <span className="relative z-10">إعادة</span>
         </Button>
 
         <Button 
           onClick={toggleMute}
           variant="outline"
-          className="font-bold border-white/30 hover:bg-white/10 transition-all"
+          className="relative font-bold border-2 border-cyan-400/50 hover:border-cyan-300 bg-cyan-950/50 hover:bg-cyan-900/70 transition-all hover:scale-110 shadow-[0_0_15px_rgba(34,211,238,0.3)] hover:shadow-[0_0_25px_rgba(34,211,238,0.6)]"
         >
-          {isMuted ? "🔇" : "🔊"}
+          <div className="absolute inset-0 bg-cyan-400/10 rounded-md blur-sm"></div>
+          <span className="relative z-10 text-xl">{isMuted ? "🔇" : "🔊"}</span>
         </Button>
 
-        <div className="flex items-center gap-2 px-4 py-2 bg-white/10 rounded-xl border border-white/20">
-          <Users size={18} className="text-cyan-400" />
-          <span className="font-bold text-white">{activePlayers.length}</span>
+        <div className="flex items-center gap-3 px-5 py-3 bg-gradient-to-r from-cyan-950/80 to-blue-950/80 rounded-2xl border border-cyan-400/30 shadow-[0_0_15px_rgba(34,211,238,0.2)]">
+          <div className="relative">
+            <Users size={20} className="text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.6)]" />
+            <div className="absolute inset-0 text-cyan-400 blur-sm"></div>
+          </div>
+          <span className="font-bold text-white text-lg drop-shadow-lg">{activePlayers.length}</span>
         </div>
       </div>
 
