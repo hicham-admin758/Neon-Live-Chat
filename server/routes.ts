@@ -168,6 +168,9 @@ export async function registerRoutes(
                 currentBombHolderId = targetUser.id;
                 io.emit("bomb_started", { playerId: targetUser.id });
                 console.log(`✅ تم تمرير القنبلة إلى ${targetUser.username}`);
+                
+                // 🔄 إعادة تشغيل المؤقت للاعب الجديد
+                startBombTimer();
               }
             }
           }
@@ -358,6 +361,9 @@ export async function registerRoutes(
          const nextPlayer = active[Math.floor(Math.random() * active.length)];
          currentBombHolderId = nextPlayer.id;
          io.emit("bomb_started", { playerId: nextPlayer.id });
+         
+         // 🔄 إعادة تشغيل المؤقت للاعب الجديد
+         startBombTimer();
       }
     } else {
         // الكل خسر
