@@ -4,6 +4,7 @@ import { Server as SocketIOServer } from "socket.io";
 import { Express } from "express";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
+import { YouTubeGunDuelGame } from "./youtubeGunDuel";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -26,6 +27,55 @@ export async function registerRoutes(
   let messageCache = new Set<string>();
   let reconnectAttempts = 0;
   let isPolling = false;
+
+  // 🎮 إنشاء نسخة من لعبة المسدسات
+  let gunDuelGame: YouTubeGunDuelGame | null = null;
+  if (YT_API_KEY) {
+    gunDuelGame = new YouTubeGunDuelGame(io, YT_API_KEY);
+    console.log("✅ تم تهيئة لعبة المسدسات");
+  } else {
+    console.warn("⚠️ لم يتم العثور على YOUTUBE_API_KEY - لعبة المسدسات معطلة");
+  }
+
+  // 🚀 دالة Auto-Start للعبة المسدسات
+  async function checkAndStartGunDuel() {
+    try {
+      // ✅ شرط 1: التحقق من عدم جريان لعبة القنبلة
+      if (currentBombHolderId !== null) {
+        console.log("⚠️ لعبة القنبلة جارية - تم تجاهل Auto-Start للمسدسات");
+        return;
+      }
+
+      // ✅ شرط 2: التحقق من وجود لعبة المسدسات
+      if (!gunDuelGame) {
+        console.log("⚠️ لعبة المسدسات غير متاحة");
+        return;
+      }
+
+      // جلب اللاعبين النشطين
+      const users = await storage.getUsers();
+      const activePlayers = users.filter(u => u.lobbyStatus === "active");
+
+      // ✅ شرط 3: التحقق من وجود لاعبين على الأقل
+      if (activePlayers.length >= 2) {
+        console.log(`🎮 Auto-Start: وجد ${activePlayers.length} لاعبين نشطين - بدء لعبة المسدسات تلقائياً...`);
+
+        // تأخير بسيط (ثانيتين) لإعطاء فرصة للمزيد من اللاعبين للانضمام
+        setTimeout(async () => {
+          // ✅ تحقق مزدوج قبل البدء
+          if (currentBombHolderId === null && gunDuelGame) {
+            try {
+              await gunDuelGame.startGameFromActivePlayers();
+            } catch (error) {
+              console.error("❌ خطأ في Auto-Start للمسدسات:", error);
+            }
+          }
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("❌ خطأ في checkAndStartGunDuel:", error);
+    }
+  }
 
   // دالة لجلب ID الشات
   async function getLiveChatId(videoId: string): Promise<string | null> {
@@ -96,6 +146,9 @@ export async function registerRoutes(
              io.emit("new_player", { ...existing, lobbyStatus: "active" });
              console.log(`✅ لاعب عاد للمشاركة: ${author.displayName}`);
            }
+
+           // 🚀 فحص Auto-Start بعد كل انضمام
+           await checkAndStartGunDuel();
         }
 
         // 2️⃣ منطق القنبلة الذكي (Smart Bomb Logic)
@@ -133,22 +186,22 @@ export async function registerRoutes(
     try {
       const { url } = req.query;
       if (typeof url !== "string") return res.status(400).json({ message: "Invalid URL" });
-      
+
       const videoIdMatch = url.match(/(?:v=|\/live\/|\/embed\/|youtu\.be\/)([^?&]+)/);
       if (!videoIdMatch) return res.status(400).json({ message: "Invalid YouTube URL" });
-      
+
       const videoId = videoIdMatch[1];
       const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YT_API_KEY}`;
       const ytRes = await fetch(apiUrl);
       const data = await ytRes.json();
-      
+
       if (!data.items?.[0]) {
         return res.json({ 
           thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
           title: "يوتيوب مباشر"
         });
       }
-      
+
       const snippet = data.items[0].snippet;
       res.json({
         thumbnail: snippet.thumbnails?.high?.url || snippet.thumbnails?.default?.url,
@@ -183,6 +236,17 @@ export async function registerRoutes(
         const thumbnail = snippet?.thumbnails?.high?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
         const title = snippet?.title || "Live Stream";
 
+        // 🎮 تشغيل مراقبة لعبة المسدسات
+        if (gunDuelGame) {
+          try {
+            await gunDuelGame.startMonitoring(videoId);
+            console.log("✅ تم تشغيل مراقبة لعبة المسدسات");
+          } catch (error) {
+            console.error("⚠️ خطأ في تشغيل مراقبة المسدسات:", error);
+            // لا نوقف العملية - نستمر في المزامنة
+          }
+        }
+
         // ⚡ تسريع الاستطلاع إلى 3 ثواني بدلاً من 10
         pollingInterval = setInterval(pollChat, 3000);
         res.json({ success: true, title, thumbnail });
@@ -191,6 +255,7 @@ export async function registerRoutes(
         res.status(400).json({ message: "لا يوجد شات مباشر" });
       }
     } catch (e) {
+      console.error("❌ خطأ في /api/sync:", e);
       res.status(500).json({ message: "خطأ في السيرفر" });
     }
   });
@@ -218,7 +283,7 @@ export async function registerRoutes(
           clearInterval(bombTimer);
           bombTimer = null;
         }
-        
+
         if (currentBombHolderId) {
           const victimId = currentBombHolderId;
           await storage.updateUserStatus(victimId, "eliminated");
@@ -235,7 +300,7 @@ export async function registerRoutes(
               bombTimer = null;
             }
             io.emit("game_winner", winner);
-            
+
             setTimeout(async () => {
               await storage.resetAllUsersStatus();
               io.emit("game_reset");
@@ -259,7 +324,7 @@ export async function registerRoutes(
 
     const randomPlayer = activePlayers[Math.floor(Math.random() * activePlayers.length)];
     currentBombHolderId = randomPlayer.id;
-    
+
     startBombTimer();
     res.json({ success: true });
   });
@@ -278,7 +343,7 @@ export async function registerRoutes(
       currentBombHolderId = null;
       io.emit("game_winner", winner);
       console.log(`🏆 الفائز هو: ${winner.username}`);
-      
+
       // إعادة التشغيل التلقائي بعد 5 ثوانٍ
       setTimeout(async () => {
         await storage.resetAllUsersStatus();
@@ -319,6 +384,69 @@ export async function registerRoutes(
 
   app.get("/api/system/status", (req, res) => {
       res.json({ isPolling: !!pollingInterval, activeLiveChatId });
+  });
+
+  // 🎮 ==================== Gun Duel Game APIs ====================
+
+  app.get("/api/gun-duel/stats", async (req, res) => {
+    if (!gunDuelGame) {
+      return res.status(503).json({ message: "لعبة المسدسات غير متاحة" });
+    }
+
+    try {
+      const stats = await gunDuelGame.getStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("❌ خطأ في /api/gun-duel/stats:", error);
+      res.status(500).json({ message: "خطأ في جلب الإحصائيات" });
+    }
+  });
+
+  app.post("/api/gun-duel/start", async (req, res) => {
+    if (!gunDuelGame) {
+      return res.status(503).json({ message: "لعبة المسدسات غير متاحة" });
+    }
+
+    // ✅ التحقق: لا تبدأ إذا كانت لعبة القنبلة جارية
+    if (currentBombHolderId !== null) {
+      return res.status(400).json({ message: "لعبة القنبلة جارية حالياً" });
+    }
+
+    try {
+      await gunDuelGame.startGameFromActivePlayers();
+      res.json({ success: true });
+    } catch (error) {
+      console.error("❌ خطأ في /api/gun-duel/start:", error);
+      res.status(500).json({ message: "خطأ في بدء اللعبة" });
+    }
+  });
+
+  app.post("/api/gun-duel/reset", async (req, res) => {
+    if (!gunDuelGame) {
+      return res.status(503).json({ message: "لعبة المسدسات غير متاحة" });
+    }
+
+    try {
+      await gunDuelGame.resetGame();
+      res.json({ success: true });
+    } catch (error) {
+      console.error("❌ خطأ في /api/gun-duel/reset:", error);
+      res.status(500).json({ message: "خطأ في إعادة تعيين اللعبة" });
+    }
+  });
+
+  app.post("/api/gun-duel/stop-monitoring", (req, res) => {
+    if (!gunDuelGame) {
+      return res.status(503).json({ message: "لعبة المسدسات غير متاحة" });
+    }
+
+    try {
+      gunDuelGame.stopMonitoring();
+      res.json({ success: true });
+    } catch (error) {
+      console.error("❌ خطأ في /api/gun-duel/stop-monitoring:", error);
+      res.status(500).json({ message: "خطأ في إيقاف المراقبة" });
+    }
   });
 
   return httpServer;
