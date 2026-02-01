@@ -43,30 +43,65 @@ export class YouTubeGunDuelGame {
     this.io = io;
     this.youtube = google.youtube({ version: "v3", auth: apiKey });
 
-    // ✅ إصلاح التزامن: إرسال القائمة فور اتصال الشاشة
+    // ✅ إرسال القائمة فور اتصال الشاشة
     this.io.on('connection', async (socket) => {
+      console.log("🔌 شاشة جديدة اتصلت - إرسال البيانات...");
+
       try {
+        // جلب اللاعبين النشطين (من لعبة القنبلة)
         const activePlayers = await db.query.users.findMany({
           where: eq(users.lobbyStatus, 'active')
         });
 
-        // إرسال البيانات للشاشة الجديدة فقط
+        // إرسال القائمة للشاشة الجديدة
         socket.emit('players_waiting', { 
           count: activePlayers.length, 
-          players: activePlayers.map(p => ({ username: p.username, avatarUrl: p.avatarUrl })) 
+          players: activePlayers.map(p => ({ 
+            username: p.username, 
+            avatarUrl: p.avatarUrl 
+          })) 
         });
+
+        console.log(`📋 تم إرسال ${activePlayers.length} لاعب نشط إلى الشاشة`);
 
         // إرسال حالة اللعبة الحالية إذا كانت جارية
         if (this.currentGame.isActive && this.currentGame.leftPlayer && this.currentGame.rightPlayer) {
-            socket.emit('game_started', {
-                leftPlayer: this.getPublicPlayerData(this.currentGame.leftPlayer),
-                rightPlayer: this.getPublicPlayerData(this.currentGame.rightPlayer)
-            });
+          socket.emit('game_started', {
+            leftPlayer: this.getPublicPlayerData(this.currentGame.leftPlayer),
+            rightPlayer: this.getPublicPlayerData(this.currentGame.rightPlayer)
+          });
+
+          console.log("🎮 تم إرسال حالة اللعبة الجارية");
         }
 
       } catch (error) {
-        console.error('❌ خطأ في مزامنة الشاشة عند الاتصال:', error);
+        console.error('❌ خطأ في مزامنة الشاشة:', error);
       }
+
+      // ✅ معالجة طلب بدء اللعبة من الواجهة
+      socket.on('start_gun_duel', async () => {
+        console.log("🎯 تم طلب بدء لعبة المسدسات من الواجهة");
+        await this.startGameFromActivePlayers();
+      });
+
+      // معالجة طلب القائمة
+      socket.on('get_waiting_players', async () => {
+        try {
+          const activePlayers = await db.query.users.findMany({
+            where: eq(users.lobbyStatus, 'active')
+          });
+
+          socket.emit('players_waiting', { 
+            count: activePlayers.length, 
+            players: activePlayers.map(p => ({ 
+              username: p.username, 
+              avatarUrl: p.avatarUrl 
+            })) 
+          });
+        } catch (error) {
+          console.error('❌ خطأ في جلب القائمة:', error);
+        }
+      });
     });
   }
 
@@ -85,11 +120,12 @@ export class YouTubeGunDuelGame {
 
       this.liveChatId = details.activeLiveChatId;
       this.isMonitoring = true;
-      this.pollChat(); // بدء التكرار
+      console.log("✅ بدء مراقبة الشات:", this.liveChatId);
+      this.pollChat();
 
       return { liveChatId: this.liveChatId };
     } catch (error) {
-      console.error("Error starting monitoring:", error);
+      console.error("❌ خطأ في بدء المراقبة:", error);
       throw error;
     }
   }
@@ -108,16 +144,14 @@ export class YouTubeGunDuelGame {
       this.nextPageToken = response.data.nextPageToken || null;
       const messages = response.data.items || [];
 
-      // معالجة الرسائل الجديدة
       for (const msg of messages) {
         await this.processMessage(msg);
       }
 
     } catch (error) {
-      console.error("Error polling chat:", error);
+      console.error("❌ خطأ في استطلاع الشات:", error);
     }
 
-    // تكرار العملية كل ثانية ونصف
     setTimeout(() => this.pollChat(), 1500);
   }
 
@@ -130,25 +164,32 @@ export class YouTubeGunDuelGame {
 
     if (!text || !authorId || !authorName) return;
 
-    // الأمر: !دخول
+    // ✅ الأمر: !دخول - إضافة للقائمة (مشترك مع لعبة القنبلة)
     if (text === "!دخول" || text.toLowerCase() === "!join") {
       await this.handleJoinCommand(authorId, authorName, authorAvatar || undefined);
     }
 
-    // الأمر: محاولة الإجابة (رقم)
+    // ✅ الأمر: !مبارزة أو !duel - بدء لعبة المسدسات
+    if ((text === "!مبارزة" || text.toLowerCase() === "!duel") && !this.currentGame.isActive) {
+      console.log(`🎲 ${authorName} طلب بدء مبارزة المسدسات`);
+      await this.startGameFromActivePlayers();
+    }
+
+    // الإجابة في اللعبة (رقم)
     if (this.currentGame.isActive && this.currentGame.targetNumber !== null) {
-        const parsedNumber = parseInt(text);
-        if (!isNaN(parsedNumber)) {
-            await this.handleGameInput(authorId, parsedNumber);
-        }
+      const parsedNumber = parseInt(text);
+      if (!isNaN(parsedNumber)) {
+        await this.handleGameInput(authorId, parsedNumber);
+      }
     }
   }
 
-  // 4. منطق الانضمام والسحب العشوائي
+  // 4. ✅ إضافة لاعب للقائمة النشطة (مشترك مع لعبة القنبلة)
   private async handleJoinCommand(channelId: string, displayName: string, avatarUrl?: string) {
     try {
-      // تجاهل اللاعبين الموجودين داخل الحلبة حالياً
+      // تجاهل اللاعبين الموجودين في اللعبة حالياً
       if (this.currentGame.leftPlayer?.id === channelId || this.currentGame.rightPlayer?.id === channelId) {
+        console.log(`⚠️ ${displayName} في اللعبة حالياً - تم التجاهل`);
         return;
       }
 
@@ -158,7 +199,11 @@ export class YouTubeGunDuelGame {
       });
 
       if (existingUser) {
-        await db.update(users).set({ lobbyStatus: 'active' }).where(eq(users.externalId, channelId));
+        await db.update(users)
+          .set({ lobbyStatus: 'active' })
+          .where(eq(users.externalId, channelId));
+
+        console.log(`🔄 ${displayName} عاد للقائمة النشطة`);
       } else {
         await db.insert(users).values({
           username: displayName,
@@ -166,6 +211,8 @@ export class YouTubeGunDuelGame {
           externalId: channelId,
           lobbyStatus: 'active'
         });
+
+        console.log(`✅ ${displayName} انضم للقائمة لأول مرة`);
       }
 
       // جلب القائمة المحدثة
@@ -173,62 +220,96 @@ export class YouTubeGunDuelGame {
         where: eq(users.lobbyStatus, 'active')
       });
 
-      // تحديث الواجهة
+      // ✅ تحديث الواجهة (كل اللاعبين يظهرون في القائمة السفلية)
       this.io.emit('players_waiting', { 
         count: activePlayers.length,
-        players: activePlayers.map(p => ({ username: p.username, avatarUrl: p.avatarUrl }))
+        players: activePlayers.map(p => ({ 
+          username: p.username, 
+          avatarUrl: p.avatarUrl 
+        }))
       });
-      this.io.emit('new_player'); 
 
-      console.log(`✅ ${displayName} انضم للقائمة. العدد: ${activePlayers.length}`);
+      console.log(`📋 القائمة النشطة: ${activePlayers.length} لاعب`);
 
-      // 🔥 التشغيل التلقائي إذا توفر لاعبين
-      if (activePlayers.length >= 2 && !this.currentGame.isActive) {
-        console.log("🎲 العدد اكتمل، جاري السحب العشوائي...");
-        // مهلة قصيرة جداً لضمان ظهور اللاعب الأخير في القائمة قبل سحبه
-        setTimeout(() => this.startGame(), 1500); 
-      }
+      // ✅ لا يوجد تشغيل تلقائي - ينتظر أمر !مبارزة أو زر من الواجهة
+
     } catch (error) {
       console.error('❌ خطأ في معالجة الانضمام:', error);
     }
   }
 
-  // 5. بدء اللعبة واختيار اللاعبين
-  private async startGame() {
+  // 5. ✅ بدء اللعبة من القائمة النشطة
+  async startGameFromActivePlayers() {
     try {
-      if (this.currentGame.isActive) return;
+      if (this.currentGame.isActive) {
+        console.log("⚠️ هناك لعبة جارية بالفعل");
+        return;
+      }
 
-      // سحب اللاعبين النشطين
+      // جلب اللاعبين النشطين
       const activePlayers = await db.query.users.findMany({
         where: eq(users.lobbyStatus, 'active')
       });
 
-      if (activePlayers.length < 2) return;
+      if (activePlayers.length < 2) {
+        console.log(`⚠️ عدد اللاعبين غير كافٍ: ${activePlayers.length}/2`);
+        this.io.emit('error_message', { 
+          message: 'يجب وجود لاعبين على الأقل! (اكتب !دخول للانضمام)' 
+        });
+        return;
+      }
 
-      // 🎲 الخلط العشوائي (Shuffle)
+      console.log(`🎲 اختيار لاعبين عشوائيين من ${activePlayers.length} لاعب...`);
+
+      // 🎲 اختيار عشوائي
       const shuffled = [...activePlayers].sort(() => Math.random() - 0.5);
       const selected1 = shuffled[0];
       const selected2 = shuffled[1];
 
-      // تحديث حالتهم إلى "في اللعبة" لإزالتهم من القائمة السفلية
-      await db.update(users).set({ lobbyStatus: 'in_game' }).where(eq(users.externalId, selected1.externalId!));
-      await db.update(users).set({ lobbyStatus: 'in_game' }).where(eq(users.externalId, selected2.externalId!));
+      console.log(`⚔️ تم الاختيار: ${selected1.username} vs ${selected2.username}`);
+
+      // تحديث حالتهم إلى "في اللعبة"
+      await db.update(users)
+        .set({ lobbyStatus: 'in_game' })
+        .where(eq(users.externalId, selected1.externalId!));
+
+      await db.update(users)
+        .set({ lobbyStatus: 'in_game' })
+        .where(eq(users.externalId, selected2.externalId!));
 
       // إعداد اللعبة
       this.currentGame = {
-        leftPlayer: { id: selected1.externalId!, username: selected1.username, avatarUrl: selected1.avatarUrl || undefined, position: 'left', isAlive: true },
-        rightPlayer: { id: selected2.externalId!, username: selected2.username, avatarUrl: selected2.avatarUrl || undefined, position: 'right', isAlive: true },
+        leftPlayer: { 
+          id: selected1.externalId!, 
+          username: selected1.username, 
+          avatarUrl: selected1.avatarUrl || undefined, 
+          position: 'left', 
+          isAlive: true 
+        },
+        rightPlayer: { 
+          id: selected2.externalId!, 
+          username: selected2.username, 
+          avatarUrl: selected2.avatarUrl || undefined, 
+          position: 'right', 
+          isAlive: true 
+        },
         targetNumber: null,
         isActive: true,
         countdownTimer: null,
         startTime: null
       };
 
-      // تحديث القائمة السفلية (إزالة المختارين)
-      const remainingPlayers = activePlayers.filter(p => p.externalId !== selected1.externalId && p.externalId !== selected2.externalId);
+      // ✅ تحديث القائمة السفلية (إزالة المختارين)
+      const remainingPlayers = activePlayers.filter(
+        p => p.externalId !== selected1.externalId && p.externalId !== selected2.externalId
+      );
+
       this.io.emit('players_waiting', { 
         count: remainingPlayers.length,
-        players: remainingPlayers.map(p => ({ username: p.username, avatarUrl: p.avatarUrl }))
+        players: remainingPlayers.map(p => ({ 
+          username: p.username, 
+          avatarUrl: p.avatarUrl 
+        }))
       });
 
       // بدء المشهد
@@ -237,7 +318,7 @@ export class YouTubeGunDuelGame {
         rightPlayer: this.getPublicPlayerData(this.currentGame.rightPlayer!)
       });
 
-      console.log(`⚔️ بدأت بين: ${selected1.username} vs ${selected2.username}`);
+      console.log(`🎮 بدأت المبارزة!`);
       this.startCountdown();
 
     } catch (error) {
@@ -250,12 +331,13 @@ export class YouTubeGunDuelGame {
   private startCountdown() {
     let count = 10;
 
-    // إرسال العد الأولي
     this.io.emit('countdown_tick', { seconds: count });
+    console.log(`⏱️ العد التنازلي: ${count}`);
 
     this.currentGame.countdownTimer = setInterval(() => {
       count--;
       this.io.emit('countdown_tick', { seconds: count });
+      console.log(`⏱️ العد التنازلي: ${count}`);
 
       if (count <= 0) {
         if (this.currentGame.countdownTimer) clearInterval(this.currentGame.countdownTimer);
@@ -266,54 +348,66 @@ export class YouTubeGunDuelGame {
 
   // 7. توليد الرقم الهدف
   private generateTarget() {
-    const target = Math.floor(Math.random() * 9000) + 1000; // رقم بين 1000 و 9999
+    const target = Math.floor(Math.random() * 9000) + 1000; // 1000-9999
     this.currentGame.targetNumber = target;
     this.currentGame.startTime = Date.now();
 
     this.io.emit('show_target', { number: target });
-    console.log(`🎯 الهدف هو: ${target}`);
+    console.log(`🎯 الهدف: ${target}`);
   }
 
   // 8. معالجة الإجابة (إطلاق النار)
   private async handleGameInput(playerId: string, numberInput: number) {
     if (!this.currentGame.isActive || !this.currentGame.targetNumber) return;
 
-    // التأكد من أن اللاعب هو أحد المتنافسين
     const isLeft = this.currentGame.leftPlayer?.id === playerId;
     const isRight = this.currentGame.rightPlayer?.id === playerId;
 
     if (!isLeft && !isRight) return;
 
-    // التحقق من صحة الرقم
+    console.log(`🔫 ${isLeft ? this.currentGame.leftPlayer?.username : this.currentGame.rightPlayer?.username} أطلق النار: ${numberInput}`);
+
     if (numberInput === this.currentGame.targetNumber) {
-        const winner = isLeft ? this.currentGame.leftPlayer! : this.currentGame.rightPlayer!;
-        const loser = isLeft ? this.currentGame.rightPlayer! : this.currentGame.leftPlayer!;
-        const reactionTime = Date.now() - (this.currentGame.startTime || 0);
+      const winner = isLeft ? this.currentGame.leftPlayer! : this.currentGame.rightPlayer!;
+      const loser = isLeft ? this.currentGame.rightPlayer! : this.currentGame.leftPlayer!;
+      const reactionTime = Date.now() - (this.currentGame.startTime || 0);
 
-        // إنهاء اللعبة
-        this.currentGame.isActive = false;
+      this.currentGame.isActive = false;
 
-        this.io.emit('shot_fired', {
-            shooter: this.getPublicPlayerData(winner),
-            victim: this.getPublicPlayerData(loser),
-            responseTime: reactionTime
-        });
+      this.io.emit('shot_fired', {
+        shooter: this.getPublicPlayerData(winner),
+        victim: this.getPublicPlayerData(loser),
+        responseTime: reactionTime
+      });
 
-        // تحديث قاعدة البيانات (إحصائيات الفوز) - اختياري
-        // يمكن إضافة كود هنا لزيادة عدد الانتصارات في جدول المستخدمين
+      console.log(`🏆 ${winner.username} فاز في ${reactionTime}ms!`);
 
-        // إعادة التعيين بعد 5 ثواني
-        setTimeout(() => this.resetGame(), 5000);
+      // إعادة التعيين بعد 5 ثواني
+      setTimeout(() => this.resetGame(), 5000);
     }
   }
 
   // 9. إعادة ضبط اللعبة
   async resetGame() {
-    // إعادة اللاعبين للحالة "خامل" أو إبقاؤهم خارج القائمة حسب رغبتك
-    // هنا سنعيدهم للحالة العادية ليتمكنوا من كتابة !دخول مرة أخرى إذا أرادوا اللعب
+    console.log("🔄 إعادة ضبط اللعبة...");
+
+    // إعادة اللاعبين للحالة النشطة
+    if (this.currentGame.leftPlayer) {
+      await db.update(users)
+        .set({ lobbyStatus: 'active' })
+        .where(eq(users.externalId, this.currentGame.leftPlayer.id));
+    }
+
+    if (this.currentGame.rightPlayer) {
+      await db.update(users)
+        .set({ lobbyStatus: 'active' })
+        .where(eq(users.externalId, this.currentGame.rightPlayer.id));
+    }
 
     // تنظيف المؤقتات
-    if (this.currentGame.countdownTimer) clearInterval(this.currentGame.countdownTimer);
+    if (this.currentGame.countdownTimer) {
+      clearInterval(this.currentGame.countdownTimer);
+    }
 
     this.currentGame = {
       leftPlayer: null,
@@ -326,17 +420,23 @@ export class YouTubeGunDuelGame {
 
     this.io.emit('game_reset');
 
-    // التحقق مما إذا كان هناك لاعبون في الانتظار لبدء جولة جديدة فوراً
+    // ✅ تحديث القائمة بعد إعادة اللاعبين
     const activePlayers = await db.query.users.findMany({
-        where: eq(users.lobbyStatus, 'active')
+      where: eq(users.lobbyStatus, 'active')
     });
 
-    if (activePlayers.length >= 2) {
-        setTimeout(() => this.startGame(), 2000);
-    }
+    this.io.emit('players_waiting', { 
+      count: activePlayers.length,
+      players: activePlayers.map(p => ({ 
+        username: p.username, 
+        avatarUrl: p.avatarUrl 
+      }))
+    });
+
+    console.log(`✅ تمت إعادة الضبط - القائمة: ${activePlayers.length} لاعب`);
   }
 
-  // دالة مساعدة لتنسيق البيانات المرسلة
+  // دالة مساعدة
   private getPublicPlayerData(player: Player) {
     return {
       id: player.id,
@@ -350,15 +450,23 @@ export class YouTubeGunDuelGame {
   // إيقاف المراقبة
   stopMonitoring() {
     this.isMonitoring = false;
-    if (this.currentGame.countdownTimer) clearInterval(this.currentGame.countdownTimer);
+    if (this.currentGame.countdownTimer) {
+      clearInterval(this.currentGame.countdownTimer);
+    }
+    console.log("🛑 تم إيقاف المراقبة");
   }
 
-  // جلب الإحصائيات (لواجهة التحكم)
+  // جلب الإحصائيات
   async getStats() {
+    const activePlayers = await db.query.users.findMany({
+      where: eq(users.lobbyStatus, 'active')
+    });
+
     return {
-        isActive: this.currentGame.isActive,
-        players: [this.currentGame.leftPlayer, this.currentGame.rightPlayer].filter(Boolean),
-        target: this.currentGame.targetNumber
+      isActive: this.currentGame.isActive,
+      players: [this.currentGame.leftPlayer, this.currentGame.rightPlayer].filter(Boolean),
+      target: this.currentGame.targetNumber,
+      waitingPlayersCount: activePlayers.length
     };
   }
 }
