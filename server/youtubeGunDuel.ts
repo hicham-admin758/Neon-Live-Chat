@@ -184,7 +184,7 @@ export class YouTubeGunDuelGame {
     }
   }
 
-  // 4. ✅ إضافة لاعب للقائمة النشطة (مشترك مع لعبة القنبلة)
+  // 4. ✅ إضافة لاعب للقائمة النشطة (مشترك مع لعبة القنبلة) - مع Auto-Start
   private async handleJoinCommand(channelId: string, displayName: string, avatarUrl?: string) {
     try {
       // تجاهل اللاعبين الموجودين في اللعبة حالياً
@@ -231,7 +231,18 @@ export class YouTubeGunDuelGame {
 
       console.log(`📋 القائمة النشطة: ${activePlayers.length} لاعب`);
 
-      // ✅ لا يوجد تشغيل تلقائي - ينتظر أمر !مبارزة أو زر من الواجهة
+      // 🚀 ✅ منطق Auto-Start الجديد
+      if (activePlayers.length >= 2 && !this.currentGame.isActive) {
+        console.log(`🎮 Auto-Start: تم الوصول إلى ${activePlayers.length} لاعبين - بدء اللعبة تلقائياً...`);
+
+        // تأخير بسيط (ثانيتين) قبل البدء لإعطاء فرصة للمزيد من اللاعبين للانضمام
+        setTimeout(async () => {
+          // تحقق مرة أخرى من أن اللعبة لم تبدأ في هذه الأثناء
+          if (!this.currentGame.isActive) {
+            await this.startGameFromActivePlayers();
+          }
+        }, 2000);
+      }
 
     } catch (error) {
       console.error('❌ خطأ في معالجة الانضمام:', error);
