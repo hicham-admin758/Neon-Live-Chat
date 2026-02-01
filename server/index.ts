@@ -203,9 +203,9 @@ app.use((req, res, next) => {
   });
 
   // 5. إضافة API للإحصائيات
-  app.get("/api/youtube/stats", (req, res) => {
+  app.get("/api/youtube/stats", async (req, res) => {
     try {
-      const stats = youtubeGame.getStats();
+      const stats = await youtubeGame.getStats();
       res.json(stats);
     } catch (error: any) {
       res.status(500).json({ 
