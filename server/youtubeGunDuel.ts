@@ -379,6 +379,9 @@ export class YouTubeGunDuelGame {
     console.log(`🔫 ${isLeft ? this.currentGame.leftPlayer?.username : this.currentGame.rightPlayer?.username} أطلق النار: ${numberInput}`);
 
     if (numberInput === this.currentGame.targetNumber) {
+      // تحقق من أن اللعبة لا تزال نشطة (لمنع إطلاق النار مرتين)
+      if (!this.currentGame.isActive) return;
+
       const winner = isLeft ? this.currentGame.leftPlayer! : this.currentGame.rightPlayer!;
       const loser = isLeft ? this.currentGame.rightPlayer! : this.currentGame.leftPlayer!;
       const reactionTime = Date.now() - (this.currentGame.startTime || 0);
@@ -445,6 +448,14 @@ export class YouTubeGunDuelGame {
     });
 
     console.log(`✅ تمت إعادة الضبط - القائمة: ${activePlayers.length} لاعب`);
+
+    // منع Auto-Start الفوري بعد إعادة الضبط لإعطاء فرصة للعبة الجديدة
+    setTimeout(() => {
+      if (activePlayers.length >= 2 && !this.currentGame.isActive) {
+        console.log(`🎮 Auto-Start بعد إعادة الضبط: ${activePlayers.length} لاعبين`);
+        this.startGameFromActivePlayers();
+      }
+    }, 1000);
   }
 
   // دالة مساعدة

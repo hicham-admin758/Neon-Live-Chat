@@ -42,62 +42,111 @@ const PlayerCard = ({ player, position, shotFired, isDead }: { player: Player | 
 
   return (
     <div className={`flex flex-col items-center gap-4 transition-all duration-500 ${isDead ? 'opacity-50 grayscale scale-90' : 'opacity-100 scale-100'}`}>
-      {/* الصورة والإطار */}
+      {/* الصورة والإطار مع تأثيرات نيون */}
       <div className="relative group">
-        <div className={`w-48 h-48 rounded-full border-4 overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)] transition-colors duration-300 ${isDead ? 'border-red-600' : 'border-cyan-400 group-hover:shadow-[0_0_50px_rgba(34,211,238,0.6)]'}`}>
+        {/* حلقة الإضاءة الخارجية */}
+        <div className={`absolute inset-0 rounded-full blur-xl transition-all duration-300 ${isDead ? 'bg-red-500/30 scale-110' : 'bg-cyan-400/40 scale-100 group-hover:scale-110'}`}></div>
+
+        <div className={`relative w-48 h-48 rounded-full border-4 overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)] transition-all duration-300 ${isDead ? 'border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.6)]' : 'border-cyan-400 shadow-[0_0_50px_rgba(34,211,238,0.6)] group-hover:shadow-[0_0_70px_rgba(34,211,238,0.8)]'}`}>
           {player.avatarUrl ? (
-            <img src={player.avatarUrl} alt={player.username} className="w-full h-full object-cover" />
+            <img src={player.avatarUrl} alt={player.username} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
           ) : (
-            <div className="w-full h-full bg-slate-800 flex items-center justify-center text-5xl font-bold text-white">
-              {player.username[0].toUpperCase()}
+            <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-5xl font-bold text-white relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/20 to-purple-500/20 rounded-full"></div>
+              <span className="relative z-10">{player.username && player.username.length > 0 ? player.username[0].toUpperCase() : '?'}</span>
             </div>
+          )}
+
+          {/* تأثير الإضاءة الداخلية */}
+          {!isDead && (
+            <div className="absolute inset-0 rounded-full bg-gradient-to-t from-transparent via-cyan-400/10 to-cyan-400/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
           )}
         </div>
 
-        {/* أيقونات الحالة */}
-        {isDead && <Skull className="absolute inset-0 m-auto text-red-600 w-24 h-24 animate-bounce drop-shadow-lg" />}
-        {!isDead && <Crown className="absolute -top-10 left-1/2 -translate-x-1/2 text-yellow-400 w-16 h-16 animate-pulse drop-shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" />}
+        {/* أيقونات الحالة مع تحسينات */}
+        {isDead && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Skull className="text-red-500 w-24 h-24 animate-bounce drop-shadow-[0_0_20px_rgba(239,68,68,0.8)]" />
+          </div>
+        )}
+        {!isDead && (
+          <Crown className="absolute -top-12 left-1/2 -translate-x-1/2 text-yellow-400 w-16 h-16 animate-pulse drop-shadow-[0_0_20px_rgba(250,204,21,0.8)] opacity-0 group-hover:opacity-100 transition-all duration-500" />
+        )}
+
+        {/* تأثير الإطلاق */}
+        {shotFired && (
+          <div className="absolute inset-0 rounded-full border-4 border-yellow-400 animate-ping"></div>
+        )}
       </div>
 
-      {/* الاسم */}
-      <div className={`px-8 py-2 rounded-xl border-2 font-black text-2xl shadow-xl backdrop-blur-md ${isDead ? 'bg-red-900/80 border-red-600 text-red-200' : 'bg-cyan-950/80 border-cyan-400 text-cyan-100'}`}>
-        {player.username}
+      {/* الاسم مع تحسينات */}
+      <div className={`relative px-8 py-3 rounded-xl border-2 font-black text-2xl shadow-xl backdrop-blur-md transition-all duration-300 ${isDead ? 'bg-red-900/90 border-red-500 text-red-100 shadow-[0_0_20px_rgba(239,68,68,0.5)]' : 'bg-cyan-950/90 border-cyan-400 text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,0.5)] hover:shadow-[0_0_30px_rgba(34,211,238,0.7)]'}`}>
+        <div className={`absolute inset-0 rounded-xl blur-sm ${isDead ? 'bg-red-500/20' : 'bg-cyan-400/20'}`}></div>
+        <span className="relative z-10">{player.username || 'لاعب غير معروف'}</span>
       </div>
 
-      {/* سلاح ومؤثرات */}
-      <div className={`text-7xl transition-transform duration-100 ${position === 'left' ? 'scale-x-[-1]' : ''} ${shotFired ? 'scale-125' : 'scale-100'}`}>
+      {/* سلاح ومؤثرات محسنة */}
+      <div className={`relative text-7xl transition-all duration-300 ${position === 'left' ? 'scale-x-[-1]' : ''} ${shotFired ? 'scale-125 animate-bounce' : 'scale-100'}`}>
         🔫
+        {/* تأثير الإضاءة على السلاح */}
+        <div className={`absolute inset-0 text-7xl blur-sm ${isDead ? 'text-red-500/50' : 'text-cyan-400/50'} transition-all duration-300`}>🔫</div>
       </div>
-      {shotFired && <div className={`absolute top-20 ${position === 'left' ? '-right-10' : '-left-10'} text-8xl animate-ping`}>💥</div>}
+
+      {/* تأثير الإطلاق المحسن */}
+      {shotFired && (
+        <div className={`absolute top-20 ${position === 'left' ? '-right-16' : '-left-16'} text-8xl animate-ping drop-shadow-[0_0_20px_rgba(250,204,21,0.8)]`}>
+          💥
+        </div>
+      )}
+
+      {/* خطوط الإضاءة الجانبية */}
+      {!isDead && (
+        <>
+          <div className="absolute top-0 bottom-0 left-0 w-1 bg-gradient-to-b from-transparent via-cyan-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          <div className="absolute top-0 bottom-0 right-0 w-1 bg-gradient-to-b from-transparent via-cyan-400/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        </>
+      )}
     </div>
   );
 };
 
 // 📋 مكون: شريط الانتظار (Lobby)
 const WaitingLobby = ({ players }: { players: WaitingPlayer[] }) => (
-  <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-5xl bg-black/60 backdrop-blur-xl rounded-3xl border border-white/10 p-4 flex items-center gap-6 overflow-hidden animate-[slideUp_0.5s_ease-out]">
-    <div className="flex items-center gap-2 px-4 border-r border-white/20 min-w-fit">
-      <Users className="text-cyan-400 w-8 h-8" />
+  <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[95%] max-w-6xl bg-black/70 backdrop-blur-2xl rounded-3xl border border-white/20 p-6 flex items-center gap-6 overflow-hidden animate-[slideUp_0.5s_ease-out] shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+    <div className="flex items-center gap-4 px-6 border-r border-white/30 min-w-fit relative">
+      <div className="relative">
+        <Users className="text-cyan-400 w-10 h-10 drop-shadow-[0_0_10px_rgba(34,211,238,0.6)]" />
+        <div className="absolute inset-0 text-cyan-400 w-10 h-10 blur-sm"></div>
+      </div>
       <div className="text-left">
-        <h3 className="text-white font-bold text-lg leading-none">قائمة الانتظار</h3>
-        <span className="text-cyan-400 text-sm font-bold">{players.length} لاعبين</span>
+        <h3 className="text-white font-bold text-xl leading-none drop-shadow-lg">قائمة الانتظار</h3>
+        <span className="text-cyan-400 text-lg font-bold drop-shadow-[0_0_5px_rgba(34,211,238,0.6)]">{players.length} لاعبين</span>
       </div>
     </div>
 
     <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide w-full mask-linear-fade">
       {players.length === 0 ? (
-        <span className="text-white/40 italic py-2">في انتظار انضمام اللاعبين (اكتب !دخول)...</span>
+        <div className="flex items-center gap-4 py-2 px-4 bg-white/5 rounded-xl border border-white/10">
+          <div className="text-2xl animate-pulse">⏳</div>
+          <span className="text-white/60 italic text-lg">في انتظار انضمام اللاعبين (اكتب !دخول)...</span>
+        </div>
       ) : (
         players.map((p, i) => (
-          <div key={i} className="flex flex-col items-center min-w-[80px] animate-[popIn_0.3s_ease-out]" style={{ animationDelay: `${i * 0.1}s` }}>
-            <div className="w-14 h-14 rounded-full border-2 border-white/30 overflow-hidden mb-1">
-              {p.avatarUrl ? (
-                <img src={p.avatarUrl} alt={p.username} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-slate-700 flex items-center justify-center text-white text-lg font-bold">{p.username[0]}</div>
-              )}
+          <div key={i} className="flex flex-col items-center min-w-[90px] animate-[popIn_0.3s_ease-out] group" style={{ animationDelay: `${i * 0.1}s` }}>
+            <div className="relative">
+              <div className="w-16 h-16 rounded-full border-3 border-white/40 overflow-hidden mb-2 shadow-[0_0_15px_rgba(255,255,255,0.2)] group-hover:shadow-[0_0_25px_rgba(34,211,238,0.4)] group-hover:border-cyan-400/60 transition-all duration-300">
+                {p.avatarUrl ? (
+                  <img src={p.avatarUrl} alt={p.username} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-white text-xl font-bold group-hover:from-cyan-600 group-hover:to-purple-600 transition-all duration-300">
+                    {p.username[0]}
+                  </div>
+                )}
+              </div>
+              {/* تأثير الإضاءة */}
+              <div className="absolute inset-0 w-16 h-16 rounded-full bg-cyan-400/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
             </div>
-            <span className="text-white/80 text-xs truncate max-w-[80px]">{p.username}</span>
+            <span className="text-white/90 text-sm truncate max-w-[90px] font-medium drop-shadow-sm group-hover:text-cyan-300 transition-colors duration-300">{p.username}</span>
           </div>
         ))
       )}
@@ -208,19 +257,56 @@ export default function YouTubeGunDuelOverlay() {
   return (
     <div className="w-full h-screen bg-transparent relative overflow-hidden font-sans select-none">
 
-      {/* الخلفية المعتمة */}
+      {/* الخلفية المتحركة مع تأثيرات نيون */}
+      <div className="absolute inset-0 bg-gradient-to-br from-black via-gray-900 to-black">
+        {/* تأثيرات النجوم المتحركة */}
+        <div className="absolute inset-0 overflow-hidden">
+          {[...Array(50)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-1 h-1 bg-white rounded-full animate-pulse"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 3}s`,
+                animationDuration: `${2 + Math.random() * 3}s`
+              }}
+            />
+          ))}
+        </div>
+
+        {/* تأثيرات الإضاءة النيون */}
+        <div className="absolute top-0 left-0 w-full h-full">
+          <div className="absolute top-10 left-10 w-32 h-32 bg-cyan-500/20 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-20 right-20 w-40 h-40 bg-red-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-60 h-60 bg-purple-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+        </div>
+      </div>
+
+      {/* طبقة الخلفية المعتمة */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none" />
 
       {/* 🏟️ ساحة المعركة */}
       <div className="relative z-10 h-full flex flex-col justify-center items-center pb-32">
 
-        {/* العنوان */}
-        <div className="absolute top-10 flex items-center gap-4 animate-[fadeInDown_1s]">
-          <Target className="text-red-500 w-12 h-12" />
-          <h1 className="text-6xl font-black text-white drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] tracking-tighter">
-            مبارزة <span className="text-cyan-400">السرعة</span>
+        {/* العنوان مع تحسينات */}
+        <div className="absolute top-10 flex items-center gap-6 animate-[fadeInDown_1s] z-20">
+          <div className="relative">
+            <Target className="text-red-500 w-16 h-16 drop-shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-pulse" />
+            <div className="absolute inset-0 text-red-500 w-16 h-16 blur-sm animate-pulse"></div>
+          </div>
+          <h1 className="text-7xl font-black text-white drop-shadow-[0_5px_5px_rgba(0,0,0,0.8)] tracking-tighter relative">
+            <span className="bg-gradient-to-r from-cyan-400 via-purple-500 to-red-500 bg-clip-text text-transparent animate-pulse">
+              مبارزة
+            </span>
+            <span className="text-white ml-4">السرعة</span>
+            {/* تأثير الإضاءة على النص */}
+            <div className="absolute inset-0 text-7xl font-black text-cyan-400/20 blur-sm -z-10">مبارزة السرعة</div>
           </h1>
-          <Target className="text-red-500 w-12 h-12" />
+          <div className="relative">
+            <Target className="text-red-500 w-16 h-16 drop-shadow-[0_0_20px_rgba(239,68,68,0.8)] animate-pulse" />
+            <div className="absolute inset-0 text-red-500 w-16 h-16 blur-sm animate-pulse"></div>
+          </div>
         </div>
 
         {/* منطقة اللاعبين والهدف */}
@@ -261,25 +347,47 @@ export default function YouTubeGunDuelOverlay() {
               </div>
             )}
 
-            {/* الرقم المستهدف */}
+            {/* الرقم المستهدف مع تحسينات */}
             {gameState.status === 'playing' && gameState.targetNumber && (
               <div className="relative group animate-[popIn_0.2s_ease-out]">
-                <div className="absolute inset-0 bg-cyan-400 blur-[60px] opacity-40 rounded-full group-hover:opacity-60 transition-opacity"></div>
-                <div className="w-64 h-64 bg-black/50 backdrop-blur-md rounded-full border-[6px] border-cyan-400 flex items-center justify-center shadow-[0_0_50px_rgba(34,211,238,0.5)]">
-                  <span className="text-9xl font-black text-white tracking-widest">{gameState.targetNumber}</span>
+                {/* حلقات الإضاءة الخارجية */}
+                <div className="absolute inset-0 bg-cyan-400 blur-[80px] opacity-30 rounded-full animate-pulse"></div>
+                <div className="absolute inset-0 bg-purple-500 blur-[60px] opacity-20 rounded-full animate-pulse" style={{ animationDelay: '0.5s' }}></div>
+
+                <div className="relative w-80 h-80 bg-black/60 backdrop-blur-xl rounded-full border-[8px] border-cyan-400 flex items-center justify-center shadow-[0_0_60px_rgba(34,211,238,0.6)] group-hover:shadow-[0_0_80px_rgba(34,211,238,0.8)] transition-all duration-300">
+                  {/* تأثير الإضاءة الداخلية */}
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-r from-cyan-400/20 via-purple-500/20 to-red-500/20 animate-pulse"></div>
+
+                  <span className="text-9xl font-black text-white tracking-widest relative z-10 drop-shadow-[0_0_20px_rgba(255,255,255,0.8)] animate-pulse">
+                    {gameState.targetNumber}
+                  </span>
                 </div>
-                <div className="absolute -bottom-16 w-full text-center">
-                  <span className="bg-red-600 text-white px-6 py-2 rounded-full text-xl font-bold animate-pulse shadow-lg">اكتب الرقم بسرعة!</span>
+
+                <div className="absolute -bottom-20 w-full text-center">
+                  <span className="bg-gradient-to-r from-red-600 to-red-800 text-white px-8 py-3 rounded-full text-xl font-bold animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.6)] border border-red-500/50">
+                    اكتب الرقم بسرعة! ⚡
+                  </span>
                 </div>
               </div>
             )}
 
-            {/* النتيجة */}
+            {/* النتيجة مع تحسينات */}
             {gameState.status === 'finished' && gameState.winner && (
-              <div className="text-center animate-[zoomIn_0.5s]">
-                <Trophy className="w-32 h-32 text-yellow-400 mx-auto drop-shadow-[0_0_30px_rgba(250,204,21,0.6)] animate-bounce" />
-                <h2 className="text-5xl font-black text-white mt-4 drop-shadow-lg">{gameState.winner.username}</h2>
-                <p className="text-2xl text-yellow-400 font-bold mt-2">فاز في {gameState.responseTime}ms ⚡</p>
+              <div className="text-center animate-[zoomIn_0.5s] relative">
+                {/* تأثيرات الخلفية للنتيجة */}
+                <div className="absolute inset-0 bg-gradient-to-r from-yellow-400/20 via-orange-500/20 to-red-500/20 blur-3xl rounded-full animate-pulse"></div>
+
+                <div className="relative z-10">
+                  <Trophy className="w-32 h-32 text-yellow-400 mx-auto drop-shadow-[0_0_30px_rgba(250,204,21,0.8)] animate-bounce" />
+                  <h2 className="text-6xl font-black text-white mt-4 drop-shadow-[0_0_20px_rgba(255,255,255,0.8)]">
+                    <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
+                      {gameState.winner.username}
+                    </span>
+                  </h2>
+                  <p className="text-3xl text-yellow-400 font-bold mt-2 drop-shadow-[0_0_10px_rgba(250,204,21,0.6)] animate-pulse">
+                    فاز في {gameState.responseTime}ms ⚡
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -301,13 +409,16 @@ export default function YouTubeGunDuelOverlay() {
       {/* 📋 شريط الانتظار السفلي (Lobby) */}
       <WaitingLobby players={waitingPlayers} />
 
-      {/* CSS Animations */}
+      {/* CSS Animations المحسنة */}
       <style>{`
-        @keyframes popIn { 0% { transform: scale(0); } 80% { transform: scale(1.1); } 100% { transform: scale(1); } }
-        @keyframes slideUp { from { transform: translate(-50%, 100%); } to { transform: translate(-50%, 0); } }
+        @keyframes popIn { 0% { transform: scale(0); opacity: 0; } 80% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes slideUp { from { transform: translate(-50%, 120%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
         @keyframes zoomIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes fadeInDown { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes glow { 0%, 100% { box-shadow: 0 0 20px rgba(34, 211, 238, 0.5); } 50% { box-shadow: 0 0 40px rgba(34, 211, 238, 0.8); } }
         .mask-linear-fade { mask-image: linear-gradient(to right, black 85%, transparent 100%); }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .animate-glow { animation: glow 2s ease-in-out infinite; }
       `}</style>
     </div>
   );
