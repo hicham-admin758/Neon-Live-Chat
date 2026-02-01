@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+Import { useState, useEffect, useRef } from "react";
 import { Target, Trophy, Skull, Crown, Users } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
