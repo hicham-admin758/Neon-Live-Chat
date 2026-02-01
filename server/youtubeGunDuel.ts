@@ -1,20 +1,19 @@
-// server/youtubeGunDuel.ts
-import { Server, Socket } from 'socket.io';
-import { google, youtube_v3 } from 'googleapis';
-import { db } from './db';
-import { users } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { google, youtube_v3 } from "googleapis";
+import { Server } from "socket.io";
+import { db } from "./db";
+import { users } from "@shared/schema";
+import { eq, sql } from "drizzle-orm";
 
+// تعريف أنواع البيانات
 interface Player {
-  id: string;                    // YouTube Channel ID
-  username: string;              // YouTube Display Name
-  avatarUrl?: string;            // YouTube Profile Picture
-  socketId?: string;             // Socket ID (للـ overlay فقط)
-  position?: 'left' | 'right';
+  id: string;
+  username: string;
+  avatarUrl?: string;
+  position: 'left' | 'right';
   isAlive: boolean;
 }
 
-interface GameSession {
+interface GameState {
   leftPlayer: Player | null;
   rightPlayer: Player | null;
   targetNumber: number | null;
@@ -24,13 +23,14 @@ interface GameSession {
 }
 
 export class YouTubeGunDuelGame {
+  private youtube;
   private io: Server;
-  private youtube: youtube_v3.Youtube;
+  private isMonitoring: boolean = false;
   private liveChatId: string | null = null;
   private nextPageToken: string | null = null;
-  private pollingInterval: NodeJS.Timeout | null = null;
 
-  private currentGame: GameSession = {
+  // حالة اللعبة الحالية
+  private currentGame: GameState = {
     leftPlayer: null,
     rightPlayer: null,
     targetNumber: null,
@@ -39,466 +39,281 @@ export class YouTubeGunDuelGame {
     startTime: null
   };
 
-  // تتبع آخر رسالة لكل مستخدم لتجنب التكرار
-  private lastMessageIds: Set<string> = new Set();
-
   constructor(io: Server, apiKey: string) {
     this.io = io;
+    this.youtube = google.youtube({ version: "v3", auth: apiKey });
 
-    // إعداد YouTube API
-    this.youtube = google.youtube({
-      version: 'v3',
-      auth: apiKey
+    // ✅ إصلاح التزامن: إرسال القائمة فور اتصال الشاشة
+    this.io.on('connection', async (socket) => {
+      try {
+        const activePlayers = await db.query.users.findMany({
+          where: eq(users.lobbyStatus, 'active')
+        });
+
+        // إرسال البيانات للشاشة الجديدة فقط
+        socket.emit('players_waiting', { 
+          count: activePlayers.length, 
+          players: activePlayers.map(p => ({ username: p.username, avatarUrl: p.avatarUrl })) 
+        });
+
+        // إرسال حالة اللعبة الحالية إذا كانت جارية
+        if (this.currentGame.isActive && this.currentGame.leftPlayer && this.currentGame.rightPlayer) {
+            socket.emit('game_started', {
+                leftPlayer: this.getPublicPlayerData(this.currentGame.leftPlayer),
+                rightPlayer: this.getPublicPlayerData(this.currentGame.rightPlayer)
+            });
+        }
+
+      } catch (error) {
+        console.error('❌ خطأ في مزامنة الشاشة عند الاتصال:', error);
+      }
     });
-
-    this.setupSocketHandlers();
   }
 
-  // 🎥 بدء مراقبة البث المباشر
-  public async startMonitoring(broadcastId: string) {
+  // 1. بدء مراقبة الشات
+  async startMonitoring(videoId: string) {
     try {
-      console.log(`🎥 بدء مراقبة البث: ${broadcastId}`);
-
-      // الحصول على Live Chat ID
-      const broadcast = await this.youtube.liveBroadcasts.list({
-        part: ['snippet'],
-        id: [broadcastId]
+      const response = await this.youtube.videos.list({
+        part: ["liveStreamingDetails"],
+        id: [videoId],
       });
 
-      if (!broadcast.data.items || broadcast.data.items.length === 0) {
-        throw new Error('لم يتم العثور على البث');
+      const details = response.data.items?.[0]?.liveStreamingDetails;
+      if (!details?.activeLiveChatId) {
+        throw new Error("Live chat ID not found. Is the video live?");
       }
 
-      this.liveChatId = broadcast.data.items[0].snippet?.liveChatId || null;
+      this.liveChatId = details.activeLiveChatId;
+      this.isMonitoring = true;
+      this.pollChat(); // بدء التكرار
 
-      if (!this.liveChatId) {
-        throw new Error('البث ليس مباشراً أو لا يحتوي على شات');
-      }
-
-      console.log(`✅ تم الاتصال بالشات: ${this.liveChatId}`);
-
-      // بدء المراقبة
-      this.startPolling();
-
-      return { success: true, liveChatId: this.liveChatId };
+      return { liveChatId: this.liveChatId };
     } catch (error) {
-      console.error('❌ خطأ في بدء المراقبة:', error);
+      console.error("Error starting monitoring:", error);
       throw error;
     }
   }
 
-  // 🔄 مراقبة الشات بشكل دوري
-  private async startPolling() {
-    const pollChat = async () => {
-      if (!this.liveChatId) return;
+  // 2. حلقة جلب الرسائل
+  private async pollChat() {
+    if (!this.isMonitoring || !this.liveChatId) return;
 
-      try {
-        const response = await this.youtube.liveChatMessages.list({
-          liveChatId: this.liveChatId,
-          part: ['snippet', 'authorDetails'],
-          pageToken: this.nextPageToken || undefined,
-          maxResults: 200
-        });
+    try {
+      const response = await this.youtube.liveChatMessages.list({
+        liveChatId: this.liveChatId,
+        part: ["snippet", "authorDetails"],
+        pageToken: this.nextPageToken || undefined,
+      });
 
-        this.nextPageToken = response.data.nextPageToken || null;
+      this.nextPageToken = response.data.nextPageToken || null;
+      const messages = response.data.items || [];
 
-        // معالجة الرسائل الجديدة
-        if (response.data.items) {
-          for (const item of response.data.items) {
-            const messageId = item.id || '';
-
-            // تجنب معالجة نفس الرسالة مرتين
-            if (this.lastMessageIds.has(messageId)) continue;
-            this.lastMessageIds.add(messageId);
-
-            // الحد من حجم Set
-            if (this.lastMessageIds.size > 1000) {
-              const oldestIds = Array.from(this.lastMessageIds).slice(0, 500);
-              oldestIds.forEach(id => this.lastMessageIds.delete(id));
-            }
-
-            await this.processMessage(item);
-          }
-        }
-
-        // الانتظار قبل الطلب التالي (pollingIntervalMillis من الـ API)
-        const pollInterval = response.data.pollingIntervalMillis || 5000;
-
-        this.pollingInterval = setTimeout(pollChat, pollInterval);
-      } catch (error) {
-        console.error('❌ خطأ في قراءة الشات:', error);
-        // إعادة المحاولة بعد 10 ثوانٍ
-        this.pollingInterval = setTimeout(pollChat, 10000);
+      // معالجة الرسائل الجديدة
+      for (const msg of messages) {
+        await this.processMessage(msg);
       }
-    };
 
-    pollChat();
+    } catch (error) {
+      console.error("Error polling chat:", error);
+    }
+
+    // تكرار العملية كل ثانية ونصف
+    setTimeout(() => this.pollChat(), 1500);
   }
 
-  // 💬 معالجة رسالة من الشات
-  private async processMessage(message: youtube_v3.Schema$LiveChatMessage) {
-    const text = message.snippet?.displayMessage?.trim() || '';
-    const author = message.authorDetails;
+  // 3. تحليل الرسالة
+  private async processMessage(msg: youtube_v3.Schema$LiveChatMessage) {
+    const text = msg.snippet?.displayMessage?.trim();
+    const authorId = msg.authorDetails?.channelId;
+    const authorName = msg.authorDetails?.displayName;
+    const authorAvatar = msg.authorDetails?.profileImageUrl;
 
-    if (!author) return;
+    if (!text || !authorId || !authorName) return;
 
-    const channelId = author.channelId || '';
-    const displayName = author.displayName || 'Unknown';
-    const profileImageUrl = author.profileImageUrl || undefined;
-
-    console.log(`💬 ${displayName}: ${text}`);
-
-    // 🎮 أمر الانضمام للعبة
-    if (text.toLowerCase() === '!دخول' || text.toLowerCase() === '!join') {
-      await this.handleJoinCommand(channelId, displayName, profileImageUrl);
+    // الأمر: !دخول
+    if (text === "!دخول" || text.toLowerCase() === "!join") {
+      await this.handleJoinCommand(authorId, authorName, authorAvatar || undefined);
     }
-    // 🎯 إذا كانت اللعبة نشطة ويكتب رقم
-    else if (this.currentGame.isActive && this.currentGame.targetNumber !== null) {
-      await this.handleNumberGuess(channelId, displayName, text);
+
+    // الأمر: محاولة الإجابة (رقم)
+    if (this.currentGame.isActive && this.currentGame.targetNumber !== null) {
+        const parsedNumber = parseInt(text);
+        if (!isNaN(parsedNumber)) {
+            await this.handleGameInput(authorId, parsedNumber);
+        }
     }
   }
 
-  // 🎮 معالجة أمر الانضمام
+  // 4. منطق الانضمام والسحب العشوائي
   private async handleJoinCommand(channelId: string, displayName: string, avatarUrl?: string) {
     try {
-      // التحقق من عدم وجوده في اللعبة الحالية
-      if (
-        this.currentGame.leftPlayer?.id === channelId ||
-        this.currentGame.rightPlayer?.id === channelId
-      ) {
-        console.log(`⚠️ ${displayName} يلعب حالياً`);
+      // تجاهل اللاعبين الموجودين داخل الحلبة حالياً
+      if (this.currentGame.leftPlayer?.id === channelId || this.currentGame.rightPlayer?.id === channelId) {
         return;
       }
 
-      // إضافة أو تحديث اللاعب في قاعدة البيانات
+      // إضافة/تحديث اللاعب في قاعدة البيانات
       const existingUser = await db.query.users.findFirst({
         where: eq(users.externalId, channelId)
       });
 
       if (existingUser) {
-        // تحديث حالة اللاعب إلى active
-        await db.update(users)
-          .set({ lobbyStatus: 'active' })
-          .where(eq(users.externalId, channelId));
-
-        console.log(`✅ ${displayName} عاد للعبة`);
+        await db.update(users).set({ lobbyStatus: 'active' }).where(eq(users.externalId, channelId));
       } else {
-        // إضافة لاعب جديد
         await db.insert(users).values({
           username: displayName,
           avatarUrl: avatarUrl || null,
           externalId: channelId,
           lobbyStatus: 'active'
         });
-
-        console.log(`✅ ${displayName} انضم لأول مرة`);
       }
 
-      // الحصول على عدد اللاعبين النشطين
+      // جلب القائمة المحدثة
       const activePlayers = await db.query.users.findMany({
         where: eq(users.lobbyStatus, 'active')
       });
 
-      // إرسال تحديث للواجهة
+      // تحديث الواجهة
       this.io.emit('players_waiting', { 
         count: activePlayers.length,
-        players: activePlayers.map(p => ({
-          username: p.username,
-          avatarUrl: p.avatarUrl
-        }))
+        players: activePlayers.map(p => ({ username: p.username, avatarUrl: p.avatarUrl }))
       });
+      this.io.emit('new_player'); 
 
-      // إرسال حدث تحديث للـ LiveLobby
-      this.io.emit('new_player');
+      console.log(`✅ ${displayName} انضم للقائمة. العدد: ${activePlayers.length}`);
 
-      // إرسال رسالة في الشات
-      if (this.liveChatId) {
-        await this.sendChatMessage(`${displayName} انضم للعبة! 🎮 (${activePlayers.length} نشطين)`);
-      }
-
-      // إذا كان هناك لاعبان أو أكثر، ابدأ اللعبة
+      // 🔥 التشغيل التلقائي إذا توفر لاعبين
       if (activePlayers.length >= 2 && !this.currentGame.isActive) {
-        setTimeout(() => this.startGame(), 3000);
+        console.log("🎲 العدد اكتمل، جاري السحب العشوائي...");
+        // مهلة قصيرة جداً لضمان ظهور اللاعب الأخير في القائمة قبل سحبه
+        setTimeout(() => this.startGame(), 1500); 
       }
     } catch (error) {
-      console.error('❌ خطأ في handleJoinCommand:', error);
+      console.error('❌ خطأ في معالجة الانضمام:', error);
     }
   }
 
-  // 🎮 بدء اللعبة - تم التحديث: اختيار عشوائي من قاعدة البيانات
+  // 5. بدء اللعبة واختيار اللاعبين
   private async startGame() {
     try {
-      if (this.currentGame.isActive) {
-        console.log('⚠️ لعبة نشطة بالفعل');
-        return;
-      }
+      if (this.currentGame.isActive) return;
 
-      // 🔍 الحصول على اللاعبين النشطين من قاعدة البيانات
+      // سحب اللاعبين النشطين
       const activePlayers = await db.query.users.findMany({
         where: eq(users.lobbyStatus, 'active')
       });
 
-      if (activePlayers.length < 2) {
-        console.log(`⚠️ لا يوجد لاعبين كافيين (${activePlayers.length})`);
-        return;
-      }
+      if (activePlayers.length < 2) return;
 
-      // 🎲 اختيار لاعبين عشوائياً
+      // 🎲 الخلط العشوائي (Shuffle)
       const shuffled = [...activePlayers].sort(() => Math.random() - 0.5);
       const selected1 = shuffled[0];
       const selected2 = shuffled[1];
 
-      // تحويل لاعبي قاعدة البيانات إلى Player objects
-      const leftPlayer: Player = {
-        id: selected1.externalId!,
-        username: selected1.username,
-        avatarUrl: selected1.avatarUrl || undefined,
-        position: 'left',
-        isAlive: true
-      };
+      // تحديث حالتهم إلى "في اللعبة" لإزالتهم من القائمة السفلية
+      await db.update(users).set({ lobbyStatus: 'in_game' }).where(eq(users.externalId, selected1.externalId!));
+      await db.update(users).set({ lobbyStatus: 'in_game' }).where(eq(users.externalId, selected2.externalId!));
 
-      const rightPlayer: Player = {
-        id: selected2.externalId!,
-        username: selected2.username,
-        avatarUrl: selected2.avatarUrl || undefined,
-        position: 'right',
-        isAlive: true
-      };
-
-      // تحديث حالة اللاعبين في قاعدة البيانات
-      await db.update(users)
-        .set({ lobbyStatus: 'in_game' })
-        .where(eq(users.externalId, selected1.externalId!));
-
-      await db.update(users)
-        .set({ lobbyStatus: 'in_game' })
-        .where(eq(users.externalId, selected2.externalId!));
-
+      // إعداد اللعبة
       this.currentGame = {
-        leftPlayer,
-        rightPlayer,
+        leftPlayer: { id: selected1.externalId!, username: selected1.username, avatarUrl: selected1.avatarUrl || undefined, position: 'left', isAlive: true },
+        rightPlayer: { id: selected2.externalId!, username: selected2.username, avatarUrl: selected2.avatarUrl || undefined, position: 'right', isAlive: true },
         targetNumber: null,
         isActive: true,
         countdownTimer: null,
         startTime: null
       };
 
-      console.log(`⚔️ مبارزة عشوائية: ${leftPlayer.username} vs ${rightPlayer.username}`);
-
-      // حساب المتبقين
-      const remaining = activePlayers.length - 2;
-      console.log(`📊 متبقي في القائمة: ${remaining} لاعبين`);
-
-      // إرسال للـ overlay
-      this.io.emit('game_started', {
-        leftPlayer: this.getPublicPlayerData(leftPlayer),
-        rightPlayer: this.getPublicPlayerData(rightPlayer)
+      // تحديث القائمة السفلية (إزالة المختارين)
+      const remainingPlayers = activePlayers.filter(p => p.externalId !== selected1.externalId && p.externalId !== selected2.externalId);
+      this.io.emit('players_waiting', { 
+        count: remainingPlayers.length,
+        players: remainingPlayers.map(p => ({ username: p.username, avatarUrl: p.avatarUrl }))
       });
 
-      // إرسال تحديث اللاعبين
-      this.io.emit('player_eliminated');
+      // بدء المشهد
+      this.io.emit('game_started', {
+        leftPlayer: this.getPublicPlayerData(this.currentGame.leftPlayer!),
+        rightPlayer: this.getPublicPlayerData(this.currentGame.rightPlayer!)
+      });
 
-      // إرسال رسالة في الشات
-      if (this.liveChatId) {
-        await this.sendChatMessage(
-          `⚔️ مبارزة جديدة! ${leftPlayer.username} 🆚 ${rightPlayer.username} 🎯`
-        );
-      }
-
-      // بدء العد التنازلي
+      console.log(`⚔️ بدأت بين: ${selected1.username} vs ${selected2.username}`);
       this.startCountdown();
+
     } catch (error) {
-      console.error('❌ خطأ في startGame:', error);
+      console.error('❌ خطأ في بدء اللعبة:', error);
+      this.resetGame();
     }
   }
 
-  // ⏱️ العد التنازلي
+  // 6. العد التنازلي
   private startCountdown() {
-    let countdown = 10;
+    let count = 10;
 
-    const tick = async () => {
-      this.io.emit('countdown_tick', { seconds: countdown });
+    // إرسال العد الأولي
+    this.io.emit('countdown_tick', { seconds: count });
 
-      // رسالة في الشات عند 5 ثوانٍ
-      if (countdown === 5 && this.liveChatId) {
-        await this.sendChatMessage('⏰ 5 ثوانٍ متبقية... استعدوا! 🔫');
+    this.currentGame.countdownTimer = setInterval(() => {
+      count--;
+      this.io.emit('countdown_tick', { seconds: count });
+
+      if (count <= 0) {
+        if (this.currentGame.countdownTimer) clearInterval(this.currentGame.countdownTimer);
+        this.generateTarget();
       }
-
-      countdown--;
-
-      if (countdown < 0) {
-        this.showTarget();
-      } else {
-        this.currentGame.countdownTimer = setTimeout(tick, 1000);
-      }
-    };
-
-    tick();
+    }, 1000);
   }
 
-  // 🎯 عرض الرقم المستهدف
-  private async showTarget() {
-    const targetNumber = Math.floor(Math.random() * 90) + 10;
-    this.currentGame.targetNumber = targetNumber;
+  // 7. توليد الرقم الهدف
+  private generateTarget() {
+    const target = Math.floor(Math.random() * 9000) + 1000; // رقم بين 1000 و 9999
+    this.currentGame.targetNumber = target;
     this.currentGame.startTime = Date.now();
 
-    console.log(`🎯 الرقم المستهدف: ${targetNumber}`);
-
-    this.io.emit('show_target', { number: targetNumber });
-
-    // رسالة في الشات
-    if (this.liveChatId) {
-      await this.sendChatMessage(
-        `🎯 الرقم هو: ${targetNumber} - اكتبه بسرعة! ⚡`
-      );
-    }
+    this.io.emit('show_target', { number: target });
+    console.log(`🎯 الهدف هو: ${target}`);
   }
 
-  // 🎯 معالجة تخمين الرقم
-  private async handleNumberGuess(channelId: string, displayName: string, text: string) {
+  // 8. معالجة الإجابة (إطلاق النار)
+  private async handleGameInput(playerId: string, numberInput: number) {
     if (!this.currentGame.isActive || !this.currentGame.targetNumber) return;
 
-    // التحقق من أن اللاعب في اللعبة
-    const player = 
-      this.currentGame.leftPlayer?.id === channelId ? this.currentGame.leftPlayer :
-      this.currentGame.rightPlayer?.id === channelId ? this.currentGame.rightPlayer :
-      null;
+    // التأكد من أن اللاعب هو أحد المتنافسين
+    const isLeft = this.currentGame.leftPlayer?.id === playerId;
+    const isRight = this.currentGame.rightPlayer?.id === playerId;
 
-    if (!player) return;
+    if (!isLeft && !isRight) return;
 
-    // التحقق من الإجابة
-    const guess = text.trim();
+    // التحقق من صحة الرقم
+    if (numberInput === this.currentGame.targetNumber) {
+        const winner = isLeft ? this.currentGame.leftPlayer! : this.currentGame.rightPlayer!;
+        const loser = isLeft ? this.currentGame.rightPlayer! : this.currentGame.leftPlayer!;
+        const reactionTime = Date.now() - (this.currentGame.startTime || 0);
 
-    if (guess === this.currentGame.targetNumber.toString()) {
-      const responseTime = this.currentGame.startTime 
-        ? Date.now() - this.currentGame.startTime 
-        : 0;
+        // إنهاء اللعبة
+        this.currentGame.isActive = false;
 
-      console.log(`🎯 ${displayName} كتب الرقم الصحيح! (${responseTime}ms)`);
-
-      await this.handleWin(player, responseTime);
-    }
-  }
-
-  // 🏆 معالجة الفوز
-  private async handleWin(winner: Player, responseTime: number) {
-    if (!this.currentGame.leftPlayer || !this.currentGame.rightPlayer) return;
-
-    const loser = winner.id === this.currentGame.leftPlayer.id 
-      ? this.currentGame.rightPlayer 
-      : this.currentGame.leftPlayer;
-
-    console.log(`💥 ${winner.username} فاز! ${loser.username} خسر!`);
-
-    try {
-      // إعادة الخاسر إلى القائمة النشطة
-      await db.update(users)
-        .set({ lobbyStatus: 'active' })
-        .where(eq(users.externalId, loser.id));
-
-      // إزالة الفائز من القائمة (تصفيته)
-      await db.delete(users)
-        .where(eq(users.externalId, winner.id));
-
-      console.log(`✅ ${loser.username} عاد للقائمة النشطة`);
-      console.log(`❌ ${winner.username} تمت تصفيته`);
-
-    } catch (error) {
-      console.error('❌ خطأ في تحديث قاعدة البيانات:', error);
-    }
-
-    // إرسال للـ overlay
-    this.io.emit('shot_fired', {
-      shooter: this.getPublicPlayerData(winner),
-      victim: this.getPublicPlayerData(loser),
-      responseTime
-    });
-
-    // إرسال تحديث للـ LiveLobby
-    this.io.emit('player_eliminated');
-
-    // رسالة في الشات
-    if (this.liveChatId) {
-      await this.sendChatMessage(
-        `🎉 ${winner.username} فاز بالمبارزة! 💥 ${loser.username} يعود للقائمة`
-      );
-    }
-
-    // إنهاء اللعبة
-    this.currentGame.isActive = false;
-
-    // مسح المؤقتات
-    if (this.currentGame.countdownTimer) {
-      clearTimeout(this.currentGame.countdownTimer);
-    }
-
-    // التحقق من وجود لاعبين آخرين وبدء لعبة جديدة
-    setTimeout(async () => {
-      try {
-        const activePlayers = await db.query.users.findMany({
-          where: eq(users.lobbyStatus, 'active')
+        this.io.emit('shot_fired', {
+            shooter: this.getPublicPlayerData(winner),
+            victim: this.getPublicPlayerData(loser),
+            responseTime: reactionTime
         });
 
-        if (activePlayers.length >= 2) {
-          console.log(`🔄 بدء لعبة جديدة... (${activePlayers.length} لاعبين نشطين)`);
-          this.startGame();
-        } else {
-          console.log(`⏳ في انتظار المزيد من اللاعبين... (${activePlayers.length} حالياً)`);
-        }
-      } catch (error) {
-        console.error('❌ خطأ في التحقق من اللاعبين:', error);
-      }
-    }, 10000);
-  }
+        // تحديث قاعدة البيانات (إحصائيات الفوز) - اختياري
+        // يمكن إضافة كود هنا لزيادة عدد الانتصارات في جدول المستخدمين
 
-  // 💬 إرسال رسالة في شات اليوتيوب
-  private async sendChatMessage(text: string) {
-    if (!this.liveChatId) return;
-
-    try {
-      await this.youtube.liveChatMessages.insert({
-        part: ['snippet'],
-        requestBody: {
-          snippet: {
-            liveChatId: this.liveChatId,
-            type: 'textMessageEvent',
-            textMessageDetails: {
-              messageText: text
-            }
-          }
-        }
-      });
-    } catch (error) {
-      console.error('❌ خطأ في إرسال رسالة:', error);
+        // إعادة التعيين بعد 5 ثواني
+        setTimeout(() => this.resetGame(), 5000);
     }
   }
 
-  // 🔄 إعادة تعيين اللعبة
-  public async resetGame() {
-    console.log('🔄 إعادة تعيين اللعبة');
+  // 9. إعادة ضبط اللعبة
+  async resetGame() {
+    // إعادة اللاعبين للحالة "خامل" أو إبقاؤهم خارج القائمة حسب رغبتك
+    // هنا سنعيدهم للحالة العادية ليتمكنوا من كتابة !دخول مرة أخرى إذا أرادوا اللعب
 
-    if (this.currentGame.countdownTimer) {
-      clearTimeout(this.currentGame.countdownTimer);
-    }
-
-    try {
-      // إعادة اللاعبين الحاليين إلى القائمة النشطة
-      if (this.currentGame.leftPlayer) {
-        await db.update(users)
-          .set({ lobbyStatus: 'active' })
-          .where(eq(users.externalId, this.currentGame.leftPlayer.id));
-      }
-
-      if (this.currentGame.rightPlayer) {
-        await db.update(users)
-          .set({ lobbyStatus: 'active' })
-          .where(eq(users.externalId, this.currentGame.rightPlayer.id));
-      }
-
-      console.log('✅ تم إعادة اللاعبين للقائمة النشطة');
-    } catch (error) {
-      console.error('❌ خطأ في إعادة تعيين قاعدة البيانات:', error);
-    }
+    // تنظيف المؤقتات
+    if (this.currentGame.countdownTimer) clearInterval(this.currentGame.countdownTimer);
 
     this.currentGame = {
       leftPlayer: null,
@@ -511,95 +326,17 @@ export class YouTubeGunDuelGame {
 
     this.io.emit('game_reset');
 
-    if (this.liveChatId) {
-      await this.sendChatMessage('🔄 تمت إعادة تعيين اللعبة! اكتب !دخول للانضمام 🎮');
-    }
-
-    // التحقق من وجود لاعبين للعبة جديدة
-    try {
-      const activePlayers = await db.query.users.findMany({
+    // التحقق مما إذا كان هناك لاعبون في الانتظار لبدء جولة جديدة فوراً
+    const activePlayers = await db.query.users.findMany({
         where: eq(users.lobbyStatus, 'active')
-      });
-
-      if (activePlayers.length >= 2) {
-        setTimeout(() => this.startGame(), 3000);
-      }
-    } catch (error) {
-      console.error('❌ خطأ في التحقق من اللاعبين:', error);
-    }
-  }
-
-  // 🛑 إيقاف المراقبة
-  public stopMonitoring() {
-    console.log('🛑 إيقاف المراقبة');
-
-    if (this.pollingInterval) {
-      clearTimeout(this.pollingInterval);
-      this.pollingInterval = null;
-    }
-
-    if (this.currentGame.countdownTimer) {
-      clearTimeout(this.currentGame.countdownTimer);
-    }
-
-    this.liveChatId = null;
-    this.nextPageToken = null;
-    this.lastMessageIds.clear();
-  }
-
-  // 🔌 إعداد Socket handlers
-  private setupSocketHandlers() {
-    this.io.on('connection', async (socket: Socket) => {
-      console.log(`🔌 Overlay connected: ${socket.id}`);
-
-      try {
-        // إرسال الحالة الحالية من قاعدة البيانات
-        const activePlayers = await db.query.users.findMany({
-          where: eq(users.lobbyStatus, 'active')
-        });
-
-        socket.emit('players_waiting', { 
-          count: activePlayers.length,
-          players: activePlayers.map(p => ({
-            username: p.username,
-            avatarUrl: p.avatarUrl
-          }))
-        });
-      } catch (error) {
-        console.error('❌ خطأ في جلب اللاعبين:', error);
-      }
-
-      if (this.currentGame.isActive) {
-        socket.emit('game_started', {
-          leftPlayer: this.currentGame.leftPlayer ? this.getPublicPlayerData(this.currentGame.leftPlayer) : null,
-          rightPlayer: this.currentGame.rightPlayer ? this.getPublicPlayerData(this.currentGame.rightPlayer) : null
-        });
-      }
-
-      // أوامر إدارية
-      socket.on('admin_reset', () => {
-        this.resetGame();
-      });
-
-      socket.on('admin_clear_queue', async () => {
-        try {
-          // حذف جميع اللاعبين من قاعدة البيانات
-          await db.delete(users);
-          this.io.emit('players_waiting', { count: 0, players: [] });
-          this.io.emit('new_player'); // تحديث LiveLobby
-          console.log('✅ تم تصفير قائمة اللاعبين');
-        } catch (error) {
-          console.error('❌ خطأ في تصفير القائمة:', error);
-        }
-      });
-
-      socket.on('disconnect', () => {
-        console.log(`🔌 Overlay disconnected: ${socket.id}`);
-      });
     });
+
+    if (activePlayers.length >= 2) {
+        setTimeout(() => this.startGame(), 2000);
+    }
   }
 
-  // 📝 البيانات العامة
+  // دالة مساعدة لتنسيق البيانات المرسلة
   private getPublicPlayerData(player: Player) {
     return {
       id: player.id,
@@ -610,88 +347,18 @@ export class YouTubeGunDuelGame {
     };
   }
 
-  // 📊 الحصول على الإحصائيات
-  public async getStats() {
-    try {
-      const activePlayers = await db.query.users.findMany({
-        where: eq(users.lobbyStatus, 'active')
-      });
+  // إيقاف المراقبة
+  stopMonitoring() {
+    this.isMonitoring = false;
+    if (this.currentGame.countdownTimer) clearInterval(this.currentGame.countdownTimer);
+  }
 
-      return {
-        isMonitoring: this.liveChatId !== null,
-        liveChatId: this.liveChatId,
-        waitingCount: activePlayers.length,
-        isGameActive: this.currentGame.isActive,
-        currentPlayers: {
-          left: this.currentGame.leftPlayer?.username || null,
-          right: this.currentGame.rightPlayer?.username || null
-        }
-      };
-    } catch (error) {
-      console.error('❌ خطأ في getStats:', error);
-      return {
-        isMonitoring: this.liveChatId !== null,
-        liveChatId: this.liveChatId,
-        waitingCount: 0,
-        isGameActive: this.currentGame.isActive,
-        currentPlayers: {
-          left: this.currentGame.leftPlayer?.username || null,
-          right: this.currentGame.rightPlayer?.username || null
-        }
-      };
-    }
+  // جلب الإحصائيات (لواجهة التحكم)
+  async getStats() {
+    return {
+        isActive: this.currentGame.isActive,
+        players: [this.currentGame.leftPlayer, this.currentGame.rightPlayer].filter(Boolean),
+        target: this.currentGame.targetNumber
+    };
   }
 }
-
-// ============================================
-// 📦 مثال الاستخدام
-// ============================================
-
-/*
-import express from 'express';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import { YouTubeGunDuelGame } from './youtubeGunDuel';
-
-const app = express();
-const server = createServer(app);
-const io = new Server(server);
-
-// YouTube API Key - احصل عليه من Google Cloud Console
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || 'YOUR_API_KEY';
-
-const game = new YouTubeGunDuelGame(io, YOUTUBE_API_KEY);
-
-// API لبدء المراقبة
-app.post('/api/youtube/start', async (req, res) => {
-  const { broadcastId } = req.body;
-
-  try {
-    const result = await game.startMonitoring(broadcastId);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// API لإيقاف المراقبة
-app.post('/api/youtube/stop', (req, res) => {
-  game.stopMonitoring();
-  res.json({ success: true });
-});
-
-// API للإحصائيات
-app.get('/api/youtube/stats', (req, res) => {
-  res.json(game.getStats());
-});
-
-// API لإعادة التعيين
-app.post('/api/youtube/reset', async (req, res) => {
-  await game.resetGame();
-  res.json({ success: true });
-});
-
-server.listen(3000, () => {
-  console.log('🚀 Server running on port 3000');
-});
-*/
