@@ -26,7 +26,7 @@ export class YouTubeGunDuelGame {
   private liveChatId: string | null = null;
   private nextPageToken: string | null = null;
   private pollingInterval: NodeJS.Timeout | null = null;
-  
+
   private waitingQueue: Player[] = [];
   private currentGame: GameSession = {
     leftPlayer: null,
@@ -44,7 +44,7 @@ export class YouTubeGunDuelGame {
 
   constructor(io: Server, apiKey: string) {
     this.io = io;
-    
+
     // إعداد YouTube API
     this.youtube = google.youtube({
       version: 'v3',
@@ -70,7 +70,7 @@ export class YouTubeGunDuelGame {
       }
 
       this.liveChatId = broadcast.data.items[0].snippet?.liveChatId || null;
-      
+
       if (!this.liveChatId) {
         throw new Error('البث ليس مباشراً أو لا يحتوي على شات');
       }
@@ -106,7 +106,7 @@ export class YouTubeGunDuelGame {
         if (response.data.items) {
           for (const item of response.data.items) {
             const messageId = item.id || '';
-            
+
             // تجنب معالجة نفس الرسالة مرتين
             if (this.lastMessageIds.has(messageId)) continue;
             this.lastMessageIds.add(messageId);
@@ -123,7 +123,7 @@ export class YouTubeGunDuelGame {
 
         // الانتظار قبل الطلب التالي (pollingIntervalMillis من الـ API)
         const pollInterval = response.data.pollingIntervalMillis || 5000;
-        
+
         this.pollingInterval = setTimeout(pollChat, pollInterval);
       } catch (error) {
         console.error('❌ خطأ في قراءة الشات:', error);
@@ -139,7 +139,7 @@ export class YouTubeGunDuelGame {
   private async processMessage(message: youtube_v3.Schema$LiveChatMessage) {
     const text = message.snippet?.displayMessage?.trim() || '';
     const author = message.authorDetails;
-    
+
     if (!author) return;
 
     const channelId = author.channelId || '';
@@ -215,17 +215,48 @@ export class YouTubeGunDuelGame {
     }
   }
 
-  // 🎮 بدء اللعبة
+  // 🎲 دالة مساعدة لاختيار عنصر عشوائي من مصفوفة
+  private getRandomElement<T>(array: T[]): T {
+    const randomIndex = Math.floor(Math.random() * array.length);
+    return array[randomIndex];
+  }
+
+  // 🎲 دالة مساعدة لاختيار عنصرين عشوائيين مختلفين من مصفوفة
+  private getRandomPair<T>(array: T[]): [T, T] | null {
+    if (array.length < 2) return null;
+
+    // نسخ المصفوفة لعدم تعديل الأصلية
+    const shuffled = [...array];
+
+    // خوارزمية Fisher-Yates للخلط العشوائي
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    // أول عنصرين من المصفوفة المخلوطة
+    return [shuffled[0], shuffled[1]];
+  }
+
+  // 🎮 بدء اللعبة - تم التحديث: اختيار عشوائي
   private async startGame() {
     if (this.waitingQueue.length < 2) return;
     if (this.currentGame.isActive) return;
 
-    // اختيار أول لاعبين من القائمة (FIFO)
-    const leftPlayer = { ...this.waitingQueue[0], position: 'left' as const, isAlive: true };
-    const rightPlayer = { ...this.waitingQueue[1], position: 'right' as const, isAlive: true };
+    // 🎲 اختيار لاعبين عشوائياً من القائمة
+    const randomPair = this.getRandomPair(this.waitingQueue);
+    if (!randomPair) return;
 
-    // إزالتهم من قائمة الانتظار
-    this.waitingQueue = this.waitingQueue.slice(2);
+    const [selectedPlayer1, selectedPlayer2] = randomPair;
+
+    // تعيين المواقع
+    const leftPlayer = { ...selectedPlayer1, position: 'left' as const, isAlive: true };
+    const rightPlayer = { ...selectedPlayer2, position: 'right' as const, isAlive: true };
+
+    // إزالة اللاعبين المختارين من قائمة الانتظار
+    this.waitingQueue = this.waitingQueue.filter(
+      p => p.id !== leftPlayer.id && p.id !== rightPlayer.id
+    );
 
     this.currentGame = {
       leftPlayer,
@@ -236,7 +267,8 @@ export class YouTubeGunDuelGame {
       startTime: null
     };
 
-    console.log(`⚔️ مبارزة: ${leftPlayer.username} vs ${rightPlayer.username}`);
+    console.log(`⚔️ مبارزة عشوائية: ${leftPlayer.username} vs ${rightPlayer.username}`);
+    console.log(`📊 متبقي في قائمة الانتظار: ${this.waitingQueue.length} لاعبين`);
 
     // إرسال للـ overlay
     this.io.emit('game_started', {
@@ -311,7 +343,7 @@ export class YouTubeGunDuelGame {
 
     // التحقق من الإجابة
     const guess = text.trim();
-    
+
     if (guess === this.currentGame.targetNumber.toString()) {
       const responseTime = this.currentGame.startTime 
         ? Date.now() - this.currentGame.startTime 
@@ -432,7 +464,7 @@ export class YouTubeGunDuelGame {
   // 🛑 إيقاف المراقبة
   public stopMonitoring() {
     console.log('🛑 إيقاف المراقبة');
-    
+
     if (this.pollingInterval) {
       clearTimeout(this.pollingInterval);
       this.pollingInterval = null;
@@ -535,7 +567,7 @@ const game = new YouTubeGunDuelGame(io, YOUTUBE_API_KEY);
 // API لبدء المراقبة
 app.post('/api/youtube/start', async (req, res) => {
   const { broadcastId } = req.body;
-  
+
   try {
     const result = await game.startMonitoring(broadcastId);
     res.json(result);

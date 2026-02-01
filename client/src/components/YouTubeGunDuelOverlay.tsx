@@ -173,7 +173,7 @@ function YouTubeGunDuelOverlay() {
     }
   };
 
-  // 🌐 إعداد Socket.IO
+  // 🌐 إعداد Socket.IO - التحديث الكامل مع إصلاح عرض اللاعبين
   useEffect(() => {
     const socket = io(window.location.origin, { 
       path: "/socket.io",
@@ -184,16 +184,51 @@ function YouTubeGunDuelOverlay() {
 
     socketRef.current = socket;
 
-    // 👥 تحديث عدد المنتظرين
-    socket.on("players_waiting", ({ count }: { count: number }) => {
-      setGameState(prev => ({ ...prev, waitingCount: count }));
+    // 👥 تحديث المنتظرين - الحل: استقبال اللاعبين وعرضهم في الدوائر
+    socket.on("players_waiting", ({ count, players }: { 
+      count: number; 
+      players: Array<{ username: string; avatarUrl?: string }> 
+    }) => {
+      console.log('👥 لاعبين منتظرين:', { count, players });
+
+      setGameState(prev => {
+        // إنشاء كائنات اللاعبين المؤقتة للعرض في الدوائر
+        const tempLeftPlayer = players[0] ? {
+          id: `temp-${players[0].username}`,
+          username: players[0].username,
+          avatarUrl: players[0].avatarUrl,
+          position: 'left' as const,
+          isAlive: true
+        } : null;
+
+        const tempRightPlayer = players[1] ? {
+          id: `temp-${players[1].username}`,
+          username: players[1].username,
+          avatarUrl: players[1].avatarUrl,
+          position: 'right' as const,
+          isAlive: true
+        } : null;
+
+        return {
+          ...prev,
+          waitingCount: count,
+          leftPlayer: tempLeftPlayer,
+          rightPlayer: tempRightPlayer
+        };
+      });
+
+      // تشغيل صوت انضمام لاعب جديد
+      if (count > 0) {
+        playSound("playerJoin");
+      }
     });
 
-    // 🎮 بداية اللعبة
+    // 🎮 بداية اللعبة - تحديث اللاعبين بالبيانات النهائية
     socket.on("game_started", ({ leftPlayer, rightPlayer }: { 
       leftPlayer: Player; 
       rightPlayer: Player; 
     }) => {
+      console.log('🎮 بدء اللعبة:', { leftPlayer, rightPlayer });
       playSound("playerJoin");
 
       setGameState(prev => ({
@@ -202,7 +237,8 @@ function YouTubeGunDuelOverlay() {
         isCountdown: true,
         leftPlayer,
         rightPlayer,
-        countdown: 10
+        countdown: 10,
+        waitingCount: 0 // مسح العداد عند بدء اللعبة
       }));
     });
 
@@ -217,6 +253,8 @@ function YouTubeGunDuelOverlay() {
 
     // 🎯 ظهور الرقم
     socket.on("show_target", ({ number }: { number: number }) => {
+      console.log('🎯 الرقم المستهدف:', number);
+
       setGameState(prev => ({
         ...prev,
         isCountdown: false,
@@ -235,6 +273,8 @@ function YouTubeGunDuelOverlay() {
       victim: Player;
       responseTime?: number;
     }) => {
+      console.log('💥 إطلاق النار:', { shooter: shooter.username, victim: victim.username, responseTime });
+
       playSound("gunshot");
       setShotFired(shooter.position);
 
@@ -261,6 +301,8 @@ function YouTubeGunDuelOverlay() {
 
     // 🔄 إعادة تعيين
     socket.on("game_reset", () => {
+      console.log('🔄 إعادة تعيين اللعبة');
+
       setGameState({
         isWaiting: true,
         isCountdown: false,
@@ -274,6 +316,19 @@ function YouTubeGunDuelOverlay() {
         waitingCount: 0
       });
       setShotFired(null);
+    });
+
+    // معالجة الاتصال
+    socket.on("connect", () => {
+      console.log("✅ متصل بالسيرفر:", socket.id);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("❌ انقطع الاتصال بالسيرفر");
+    });
+
+    socket.on("connect_error", (error) => {
+      console.error("❌ خطأ في الاتصال:", error);
     });
 
     return () => {
