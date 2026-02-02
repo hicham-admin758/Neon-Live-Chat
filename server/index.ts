@@ -78,7 +78,7 @@ function extractYouTubeVideoId(input: string): string | null {
       next();
     });
 
-    // تسجيل المسارات الأساسية
+    // تسجيل المسارات الأساسية قبل أي middleware آخر
     await registerRoutes(httpServer, app, io, youtubeGame);
 
     // 3. إضافة API لبدء مراقبة بث يوتيوب من الموقع
@@ -180,7 +180,7 @@ function extractYouTubeVideoId(input: string): string | null {
       serveStatic(app);
     } else {
       const { setupVite } = await import("./vite");
-      await setupVite(httpServer, app);
+      await setupVite(httpServer, app, io, youtubeGame);
     }
 
     const port = parseInt(process.env.PORT || "5000", 10);

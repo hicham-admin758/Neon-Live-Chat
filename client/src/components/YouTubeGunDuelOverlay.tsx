@@ -136,6 +136,25 @@ const WaitingLobby = ({ players, onStartGame }: { players: WaitingPlayer[], onSt
       </div>
     )}
 
+    {/* زر إضافة لاعبين تجريبيين */}
+    <div className="flex items-center gap-4 px-6 border-r border-white/30 min-w-fit">
+      <button
+        onClick={async () => {
+          try {
+            // إضافة لاعبين تجريبيين عبر API
+            await fetch("/api/game/add-test-players", { method: "POST" });
+            // إعادة تحميل الصفحة لتحديث القائمة
+            setTimeout(() => window.location.reload(), 500);
+          } catch (e) {
+            console.error("Failed to add test players", e);
+          }
+        }}
+        className="bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-700 hover:to-purple-900 text-white font-bold py-2 px-4 rounded-lg border border-purple-500/50 shadow-[0_0_15px_rgba(147,51,234,0.4)] hover:shadow-[0_0_20px_rgba(147,51,234,0.6)] transition-all duration-300 transform hover:scale-105 text-sm"
+      >
+        🧪 إضافة لاعبين تجريبيين
+      </button>
+    </div>
+
     {/* زر تصفير القائمة */}
     {players.length > 0 && (
       <div className="flex items-center gap-4 px-6 border-r border-white/30 min-w-fit">
@@ -205,6 +224,7 @@ export default function YouTubeGunDuelOverlay() {
   const [waitingPlayers, setWaitingPlayers] = useState<WaitingPlayer[]>([]);
   const [shotFired, setShotFired] = useState<'left' | 'right' | null>(null);
   const audioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const socketRef = useRef<Socket | null>(null);
 
   // 🎵 إعداد الأصوات
   useEffect(() => {
@@ -225,14 +245,15 @@ export default function YouTubeGunDuelOverlay() {
 
   // � دالة بدء اللعبة يدوياً
   const handleStartGame = () => {
-    const socket = io({ path: "/socket.io", transports: ['websocket', 'polling'] });
-    socket.emit('start_gun_duel');
-    socket.disconnect();
+    if (socketRef.current) {
+      socketRef.current.emit('start_gun_duel');
+    }
   };
 
   // �🔌 الاتصال بالسيرفر
   useEffect(() => {
     const socket = io({ path: "/socket.io", transports: ['websocket', 'polling'] });
+    socketRef.current = socket;
 
     // 1. تحديث قائمة الانتظار (Lobby)
     socket.on("players_waiting", ({ players }: { players: WaitingPlayer[] }) => {

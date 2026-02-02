@@ -468,5 +468,45 @@ export async function registerRoutes(
     }
   });
 
+  // 🧪 إضافة لاعبين تجريبيين للاختبار
+  app.post("/api/game/add-test-players", async (req, res) => {
+    console.log("🎯 تم استدعاء /api/game/add-test-players");
+    try {
+      console.log("🧪 إضافة لاعبين تجريبيين...");
+
+      // إضافة لاعبين تجريبيين إلى قاعدة البيانات
+      const testPlayers = [
+        {
+          username: "لاعب تجريبي 1",
+          avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=test1",
+          externalId: "test_player_1",
+          lobbyStatus: "active" as const
+        },
+        {
+          username: "لاعب تجريبي 2",
+          avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=test2",
+          externalId: "test_player_2",
+          lobbyStatus: "active" as const
+        },
+        {
+          username: "لاعب تجريبي 3",
+          avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=test3",
+          externalId: "test_player_3",
+          lobbyStatus: "active" as const
+        }
+      ];
+
+      for (const player of testPlayers) {
+        await storage.addUser(player);
+      }
+
+      console.log("✅ تم إضافة اللاعبين التجريبيين بنجاح");
+      res.json({ success: true, message: "تم إضافة 3 لاعبين تجريبيين" });
+    } catch (error) {
+      console.error("❌ خطأ في إضافة اللاعبين التجريبيين:", error);
+      res.status(500).json({ message: "خطأ في إضافة اللاعبين التجريبيين" });
+    }
+  });
+
   return httpServer;
 }

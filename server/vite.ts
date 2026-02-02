@@ -5,10 +5,13 @@ import viteConfig from "../vite.config";
 import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
+import { registerRoutes } from "./routes";
+import { Server as SocketIOServer } from "socket.io";
+import { YouTubeGunDuelGame } from "./youtubeGunDuel";
 
 const viteLogger = createLogger();
 
-export async function setupVite(server: Server, app: Express) {
+export async function setupVite(server: Server, app: Express, io: SocketIOServer, youtubeGame: YouTubeGunDuelGame) {
   const serverOptions = {
     middlewareMode: true,
     hmr: { server, path: "/vite-hmr" },
@@ -31,7 +34,15 @@ export async function setupVite(server: Server, app: Express) {
 
   app.use(vite.middlewares);
 
+  // إزالة التسجيل الثاني
+  // await registerRoutes(server, app, io, youtubeGame);
+
   app.use("/{*path}", async (req, res, next) => {
+    // استثناء للـ API routes وأي routes أخرى
+    if (req.path.startsWith("/api/") || req.path.startsWith("/socket.io/")) {
+      return next();
+    }
+
     const url = req.originalUrl;
 
     try {
