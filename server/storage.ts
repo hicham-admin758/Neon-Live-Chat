@@ -1,6 +1,6 @@
 import { users, type User, type InsertUser } from "@shared/schema";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -11,6 +11,7 @@ export interface IStorage {
   resetAllUsersStatus(): Promise<void>;
   deleteAllUsers(): Promise<void>;
   addUser(user: InsertUser): Promise<User>;
+  deleteDummyPlayers(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -55,6 +56,10 @@ export class DatabaseStorage implements IStorage {
   async addUser(user: InsertUser): Promise<User> {
     const [newUser] = await db.insert(users).values(user).returning();
     return newUser;
+  }
+
+  async deleteDummyPlayers(): Promise<void> {
+    await db.delete(users).where(like(users.externalId, "test_%"));
   }
 }
 

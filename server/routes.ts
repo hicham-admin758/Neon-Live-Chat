@@ -515,5 +515,20 @@ export async function registerRoutes(
     }
   });
 
+  // API لمسح اللاعبين الوهميين
+  app.post("/api/game/clear-dummy-players", async (req, res) => {
+    try {
+      // حذف اللاعبين الذين externalId يبدأ بـ "test_"
+      await storage.deleteDummyPlayers();
+
+      console.log("✅ تم مسح اللاعبين الوهميين");
+
+      res.json({ success: true, message: "تم مسح اللاعبين الوهميين" });
+    } catch (error) {
+      console.error("❌ خطأ في مسح اللاعبين الوهميين:", error);
+      res.status(500).json({ message: "خطأ في مسح اللاعبين الوهميين" });
+    }
+  });
+
   return httpServer;
 }
