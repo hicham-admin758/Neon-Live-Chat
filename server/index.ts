@@ -5,6 +5,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { YouTubeGunDuelGame } from "./youtubeGunDuel"; 
+import { MultiplayerDuelGame } from "./multiplayerDuel"; 
 
 declare module "http" {
   interface IncomingMessage {
@@ -53,6 +54,7 @@ function extractYouTubeVideoId(input: string): string | null {
     });
 
     const youtubeGame = new YouTubeGunDuelGame(io);
+    const multiplayerDuelGame = new MultiplayerDuelGame(io);
 
     app.use((req, res, next) => {
       const start = Date.now();
@@ -79,7 +81,7 @@ function extractYouTubeVideoId(input: string): string | null {
     });
 
     // تسجيل المسارات الأساسية
-    await registerRoutes(httpServer, app);
+    await registerRoutes(httpServer, app, io, youtubeGame);
 
     // 3. إضافة API لبدء مراقبة بث يوتيوب من الموقع
     app.post("/api/youtube/start", async (req, res) => {

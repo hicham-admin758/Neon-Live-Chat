@@ -10,6 +10,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import YouTubeGunDuelOverlay from "@/components/YouTubeGunDuelOverlay";
+import MultiplayerDuel from "@/components/MultiplayerDuel";
 
 export default function Home() {
   const [activeGame, setActiveGame] = useState<string | null>(null);
@@ -50,6 +51,24 @@ export default function Home() {
     );
   }
 
+  if (activeGame === "multiplayer-duel") {
+    return (
+      <div className="min-h-screen h-screen bg-[#050505] flex flex-col items-center justify-center p-4 relative" dir="rtl">
+        <Button 
+          variant="ghost" 
+          className="absolute top-8 right-8 text-white/70 hover:text-white z-50 font-bold"
+          onClick={() => setActiveGame(null)}
+        >
+          <ArrowLeft className="ml-2" />
+          العودة للرئيسية
+        </Button>
+        <div className="w-full max-w-7xl flex justify-center">
+          <MultiplayerDuel />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col" dir="rtl">
       <ConnectionHeader />
@@ -61,7 +80,7 @@ export default function Home() {
         <section id="games" className="py-16 px-4 md:px-8 max-w-[1200px] mx-auto text-center">
           <h2 className="text-[2.5rem] mb-12 font-bold text-white">الألعاب المتاحة</h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 justify-items-center">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 justify-items-center">
             <GameCard 
               title="قنبلة الدردشة" 
               description="لعبة متفجرة يتحكم بها الجمهور" 
@@ -78,6 +97,15 @@ export default function Home() {
               icon="🔫"
               gradient="linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%)"
               onPlay={() => setActiveGame("gun-duel")}
+            />
+
+            <GameCard 
+              title="مبارزة متعددة اللاعبين" 
+              description="لعبة مبارزة سريعة بين لاعبين" 
+              players="2.3K" 
+              icon="⚔️"
+              gradient="linear-gradient(135deg, #0f172a 0%, #334155 100%)"
+              onPlay={() => setActiveGame("multiplayer-duel")}
             />
           </div>
         </section>
