@@ -10,6 +10,7 @@ export interface IStorage {
   updateUserStatus(id: number, status: string): Promise<User | undefined>;
   resetAllUsersStatus(): Promise<void>;
   deleteAllUsers(): Promise<void>;
+  addUser(user: InsertUser): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -49,6 +50,11 @@ export class DatabaseStorage implements IStorage {
       console.log("Failed to delete users, resetting status instead");
       await this.resetAllUsersStatus();
     }
+  }
+
+  async addUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return newUser;
   }
 }
 

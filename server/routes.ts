@@ -24,46 +24,6 @@ export async function registerRoutes(
 
   // 🎮 gunDuelGame يأتي كمعامل الآن
 
-  // 🚀 دالة Auto-Start للعبة المسدسات
-  async function checkAndStartGunDuel() {
-    try {
-      // ✅ شرط 1: التحقق من عدم جريان لعبة القنبلة
-      if (currentBombHolderId !== null) {
-        console.log("⚠️ لعبة القنبلة جارية - تم تجاهل Auto-Start للمسدسات");
-        return;
-      }
-
-      // ✅ شرط 2: التحقق من وجود لعبة المسدسات
-      if (!gunDuelGame) {
-        console.log("⚠️ لعبة المسدسات غير متاحة");
-        return;
-      }
-
-      // جلب اللاعبين النشطين
-      const users = await storage.getUsers();
-      const activePlayers = users.filter(u => u.lobbyStatus === "active");
-
-      // ✅ شرط 3: التحقق من وجود لاعبين على الأقل
-      if (activePlayers.length >= 2) {
-        console.log(`🎮 Auto-Start: وجد ${activePlayers.length} لاعبين نشطين - بدء لعبة المسدسات تلقائياً...`);
-
-        // تأخير بسيط (ثانيتين) لإعطاء فرصة للمزيد من اللاعبين للانضمام
-        setTimeout(async () => {
-          // ✅ تحقق مزدوج قبل البدء
-          if (currentBombHolderId === null && gunDuelGame) {
-            try {
-              await gunDuelGame.startGameFromActivePlayers();
-            } catch (error) {
-              console.error("❌ خطأ في Auto-Start للمسدسات:", error);
-            }
-          }
-        }, 2000);
-      }
-    } catch (error) {
-      console.error("❌ خطأ في checkAndStartGunDuel:", error);
-    }
-  }
-
   // دالة لجلب ID الشات
   async function getLiveChatId(videoId: string): Promise<string | null> {
     try {
@@ -152,8 +112,6 @@ export async function registerRoutes(
              console.log(`⚠️ اللاعب ${author.displayName} نشط بالفعل`);
            }
 
-           // 🚀 فحص Auto-Start بعد كل انضمام
-           await checkAndStartGunDuel();
         }
 
         // 2️⃣ منطق القنبلة الذكي (Smart Bomb Logic)
@@ -505,6 +463,35 @@ export async function registerRoutes(
     } catch (error) {
       console.error("❌ خطأ في إضافة اللاعبين التجريبيين:", error);
       res.status(500).json({ message: "خطأ في إضافة اللاعبين التجريبيين" });
+    }
+  });
+
+  // API لإضافة لاعب تجريبي واحد
+  app.post("/api/game/add-test-player", async (req, res) => {
+    try {
+      const { username } = req.body;
+      const playerName = username || `لاعب تجريبي ${Date.now()}`;
+
+      const testPlayer = {
+        username: playerName,
+        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${playerName}`,
+        externalId: `test_${Date.now()}`,
+        lobbyStatus: "active" as const
+      };
+
+      await storage.addUser(testPlayer);
+
+      console.log(`✅ تم إضافة اللاعب التجريبي: ${playerName}`);
+
+      // فحص Auto-Start
+      const users = await storage.getUsers();
+      const activePlayers = users.filter(u => u.lobbyStatus === "active");
+      console.log(`📋 اللاعبون النشطون الآن: ${activePlayers.length}`);
+
+      res.json({ success: true, message: `تم إضافة اللاعب ${playerName}` });
+    } catch (error) {
+      console.error("❌ خطأ في إضافة اللاعب التجريبي:", error);
+      res.status(500).json({ message: "خطأ في إضافة اللاعب التجريبي" });
     }
   });
 

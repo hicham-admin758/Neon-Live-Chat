@@ -4,7 +4,8 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import { YouTubeGunDuelGame } from "./youtubeGunDuel"; 
+import { YouTubeGunDuelGame } from "./youtubeGunDuel";
+import { storage } from "./storage"; 
 
 declare module "http" {
   interface IncomingMessage {
@@ -53,6 +54,20 @@ function extractYouTubeVideoId(input: string): string | null {
     });
 
     const youtubeGame = new YouTubeGunDuelGame(io, process.env.YOUTUBE_API_KEY || "");
+
+    // فحص Auto-Start عند بدء السيرفر
+    (async () => {
+      try {
+        const users = await storage.getUsers();
+        const activePlayers = users.filter(u => u.lobbyStatus === "active");
+        if (activePlayers.length >= 2) {
+          console.log(`🎮 Auto-Start عند بدء السيرفر: ${activePlayers.length} لاعبين`);
+          await youtubeGame.startGameFromActivePlayers();
+        }
+      } catch (error) {
+        console.error("❌ خطأ في Auto-Start عند بدء السيرفر:", error);
+      }
+    })();
 
     app.use((req, res, next) => {
       const start = Date.now();
