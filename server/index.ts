@@ -79,7 +79,7 @@ function extractYouTubeVideoId(input: string): string | null {
     });
 
     // تسجيل المسارات الأساسية
-    await registerRoutes(httpServer, app, io);
+    await registerRoutes(httpServer, app, io, youtubeGame);
 
     // 3. إضافة API لبدء مراقبة بث يوتيوب من الموقع
     app.post("/api/youtube/start", async (req, res) => {

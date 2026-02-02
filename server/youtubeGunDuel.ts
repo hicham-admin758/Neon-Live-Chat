@@ -161,7 +161,7 @@ export class YouTubeGunDuelGame {
     }
 
     // زيادة فترة الاستطلاع لتجنب تجاوز حد YouTube API
-    setTimeout(() => this.pollChat(), 10000); // 10 ثواني بدلاً من 1.5
+    setTimeout(() => this.pollChat(), 20000); // 20 ثانية بدلاً من 10
   }
 
   // 3. تحليل الرسالة

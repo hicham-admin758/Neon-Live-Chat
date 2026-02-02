@@ -9,7 +9,8 @@ import { YouTubeGunDuelGame } from "./youtubeGunDuel";
 export async function registerRoutes(
   httpServer: Server,
   app: Express,
-  io: SocketIOServer
+  io: SocketIOServer,
+  gunDuelGame: YouTubeGunDuelGame
 ): Promise<Server> {
   const YT_API_KEY = process.env.YOUTUBE_API_KEY;
   let activeLiveChatId: string | null = null;
@@ -21,14 +22,7 @@ export async function registerRoutes(
   let reconnectAttempts = 0;
   let isPolling = false;
 
-  // 🎮 إنشاء نسخة من لعبة المسدسات
-  let gunDuelGame: YouTubeGunDuelGame | null = null;
-  if (YT_API_KEY) {
-    gunDuelGame = new YouTubeGunDuelGame(io, YT_API_KEY);
-    console.log("✅ تم تهيئة لعبة المسدسات");
-  } else {
-    console.warn("⚠️ لم يتم العثور على YOUTUBE_API_KEY - لعبة المسدسات معطلة");
-  }
+  // 🎮 gunDuelGame يأتي كمعامل الآن
 
   // 🚀 دالة Auto-Start للعبة المسدسات
   async function checkAndStartGunDuel() {
