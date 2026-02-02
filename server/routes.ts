@@ -495,5 +495,25 @@ export async function registerRoutes(
     }
   });
 
+  // API لإرسال رسالة تجريبية
+  app.post("/api/game/send-test-message", async (req, res) => {
+    try {
+      const { message, playerId } = req.body;
+      const player = playerId || "test_player_1"; // استخدم playerId من اللاعب المضاف
+
+      console.log(`📨 رسالة تجريبية من ${player}: ${message}`);
+
+      // محاكاة processMessage
+      if (gunDuelGame) {
+        await gunDuelGame.processTestMessage(player, message);
+      }
+
+      res.json({ success: true, message: `تم إرسال: ${message}` });
+    } catch (error) {
+      console.error("❌ خطأ في إرسال الرسالة التجريبية:", error);
+      res.status(500).json({ message: "خطأ في إرسال الرسالة التجريبية" });
+    }
+  });
+
   return httpServer;
 }

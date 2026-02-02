@@ -499,13 +499,20 @@ export class YouTubeGunDuelGame {
     };
   }
 
-  // إيقاف المراقبة
-  stopMonitoring() {
-    this.isMonitoring = false;
-    if (this.currentGame.countdownTimer) {
-      clearInterval(this.currentGame.countdownTimer);
+  // دالة لمعالجة رسالة تجريبية
+  async processTestMessage(playerId: string, message: string) {
+    const text = message.trim();
+    if (!text) return;
+
+    console.log(`📨 رسالة تجريبية من ${playerId}: ${text}`);
+
+    // الإجابة في اللعبة (رقم)
+    if (this.currentGame.isActive && this.currentGame.targetNumber !== null) {
+      const parsedNumber = parseInt(text);
+      if (!isNaN(parsedNumber)) {
+        await this.handleGameInput(playerId, parsedNumber);
+      }
     }
-    console.log("🛑 تم إيقاف المراقبة");
   }
 
   // جلب الإحصائيات
