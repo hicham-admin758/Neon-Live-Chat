@@ -306,30 +306,35 @@ export class YouTubeGunDuelGame {
         return;
       }
 
-      console.log(`🎯 بدء مبارزة بين: ${activePlayers[0].username} vs ${activePlayers[1].username}`);
+      // 🎲 اختيار لاعبين عشوائيين من القائمة
+      const shuffled = [...activePlayers].sort(() => Math.random() - 0.5);
+      const player1 = shuffled[0]; // لاعب عشوائي 1
+      const player2 = shuffled[1]; // لاعب عشوائي 2
+
+      console.log(`🎯 بدء مبارزة عشوائية بين: ${player1.username} vs ${player2.username}`);
 
       // تحديث حالتهم إلى "في اللعبة"
       await db.update(users)
         .set({ lobbyStatus: 'in_game' })
-        .where(eq(users.externalId, activePlayers[0].externalId!));
+        .where(eq(users.externalId, player1.externalId!));
 
       await db.update(users)
         .set({ lobbyStatus: 'in_game' })
-        .where(eq(users.externalId, activePlayers[1].externalId!));
+        .where(eq(users.externalId, player2.externalId!));
 
       // إعداد اللعبة - اللاعب الأول على اليمين، الثاني على اليسار
       this.currentGame = {
         leftPlayer: {
-          id: activePlayers[1].externalId!,
-          username: activePlayers[1].username,
-          avatarUrl: activePlayers[1].avatarUrl || undefined,
+          id: player2.externalId!,
+          username: player2.username,
+          avatarUrl: player2.avatarUrl || undefined,
           position: 'left',
           isAlive: true
         },
         rightPlayer: {
-          id: activePlayers[0].externalId!,
-          username: activePlayers[0].username,
-          avatarUrl: activePlayers[0].avatarUrl || undefined,
+          id: player1.externalId!,
+          username: player1.username,
+          avatarUrl: player1.avatarUrl || undefined,
           position: 'right',
           isAlive: true
         },
@@ -351,7 +356,7 @@ export class YouTubeGunDuelGame {
         rightPlayer: this.getPublicPlayerData(this.currentGame.rightPlayer!)
       });
 
-      console.log(`🎮 بدأت المبارزة: ${activePlayers[0].username} (يمين) vs ${activePlayers[1].username} (يسار)`);
+      console.log(`🎮 بدأت المبارزة: ${player1.username} (يمين) vs ${player2.username} (يسار)`);
       this.startCountdown();
 
     } catch (error) {
@@ -414,19 +419,21 @@ export class YouTubeGunDuelGame {
       // تحقق من أن اللعبة لا تزال نشطة (لمنع إطلاق النار مرتين)
       if (!this.currentGame.isActive) return;
 
-      const winner = isLeft ? this.currentGame.leftPlayer! : this.currentGame.rightPlayer!;
-      const loser = isLeft ? this.currentGame.rightPlayer! : this.currentGame.leftPlayer!;
+      // في هذه اللعبة: اللاعب الذي يكتب الرقم أولاً يطلق النار ويموت، والخصم يفوز
+      const shooter = isLeft ? this.currentGame.leftPlayer! : this.currentGame.rightPlayer!;
+      const winner = isLeft ? this.currentGame.rightPlayer! : this.currentGame.leftPlayer!;
       const reactionTime = Date.now() - (this.currentGame.startTime || 0);
 
       this.currentGame.isActive = false;
 
       this.io.emit('shot_fired', {
-        shooter: this.getPublicPlayerData(winner),
-        victim: this.getPublicPlayerData(loser),
+        shooter: this.getPublicPlayerData(shooter),
+        victim: this.getPublicPlayerData(shooter), // الذي أطلق النار يموت
+        winner: this.getPublicPlayerData(winner),
         responseTime: reactionTime
       });
 
-      console.log(`🏆 ${winner.username} فاز في ${reactionTime}ms!`);
+      console.log(`💥 ${shooter.username} أطلق النار ومات! ${winner.username} فاز في ${reactionTime}ms!`);
 
       // إعادة التعيين بعد 5 ثواني
       setTimeout(() => this.resetGame(), 5000);
