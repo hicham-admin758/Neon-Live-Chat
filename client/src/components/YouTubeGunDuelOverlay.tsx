@@ -111,20 +111,45 @@ const PlayerCard = ({ player, position, shotFired, isDead }: { player: Player | 
 };
 
 // 📋 مكون: شريط الانتظار (Lobby)
-const WaitingLobby = ({ players }: { players: WaitingPlayer[] }) => (
-  <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[95%] max-w-6xl bg-black/70 backdrop-blur-2xl rounded-3xl border border-white/20 p-6 flex items-center gap-6 overflow-hidden animate-[slideUp_0.5s_ease-out] shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-    <div className="flex items-center gap-4 px-6 border-r border-white/30 min-w-fit relative">
-      <div className="relative">
-        <Users className="text-cyan-400 w-10 h-10 drop-shadow-[0_0_10px_rgba(34,211,238,0.6)]" />
-        <div className="absolute inset-0 text-cyan-400 w-10 h-10 blur-sm"></div>
-      </div>
-      <div className="text-left">
-        <h3 className="text-white font-bold text-xl leading-none drop-shadow-lg">قائمة الانتظار</h3>
-        <span className="text-cyan-400 text-lg font-bold drop-shadow-[0_0_5px_rgba(34,211,238,0.6)]">{players.length} لاعبين</span>
-      </div>
-    </div>
+const WaitingLobby = ({ players }: { players: WaitingPlayer[] }) => {
+  const [showStats, setShowStats] = useState(false);
+  const [stats, setStats] = useState([]);
 
-    <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide w-full mask-linear-fade">
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/game/stats');
+      const data = await res.json();
+      setStats(data.stats);
+      setShowStats(true);
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    }
+  };
+
+  return (
+    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[95%] max-w-6xl bg-black/70 backdrop-blur-2xl rounded-3xl border border-white/20 p-6 flex items-center gap-6 overflow-hidden animate-[slideUp_0.5s_ease-out] shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+      <div className="flex items-center gap-4 px-6 border-r border-white/30 min-w-fit relative">
+        <div className="relative">
+          <Users className="text-cyan-400 w-10 h-10 drop-shadow-[0_0_10px_rgba(34,211,238,0.6)]" />
+          <div className="absolute inset-0 text-cyan-400 w-10 h-10 blur-sm"></div>
+        </div>
+        <div className="text-left">
+          <h3 className="text-white font-bold text-xl leading-none drop-shadow-lg">قائمة الانتظار</h3>
+          <span className="text-cyan-400 text-lg font-bold drop-shadow-[0_0_5px_rgba(34,211,238,0.6)]">{players.length} لاعبين</span>
+        </div>
+      </div>
+
+      {/* زر الإحصائيات */}
+      <div className="flex items-center gap-4 px-6 border-r border-white/30 min-w-fit">
+        <button
+          onClick={fetchStats}
+          className="bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 text-white font-bold py-2 px-4 rounded-lg border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.4)] hover:shadow-[0_0_20px_rgba(59,130,246,0.6)] transition-all duration-300 transform hover:scale-105 text-sm"
+        >
+          📊 إحصائيات
+        </button>
+      </div>
+
+      <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide w-full mask-linear-fade">
       {players.length === 0 ? (
         <div className="flex items-center gap-4 py-2 px-4 bg-white/5 rounded-xl border border-white/10">
           <div className="text-2xl animate-pulse">⏳</div>
@@ -357,6 +382,13 @@ export default function YouTubeGunDuelOverlay() {
                 <div className={`text-[10rem] font-black drop-shadow-2xl z-10 relative ${gameState.countdown <= 3 ? 'text-red-500' : 'text-yellow-400'}`}>
                   {gameState.countdown}
                 </div>
+                {/* شريط التقدم الذكي */}
+                <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 w-80 h-4 bg-black/50 rounded-full overflow-hidden border-2 border-cyan-400">
+                  <div
+                    className="h-full bg-gradient-to-r from-red-500 via-yellow-400 to-green-500 transition-all duration-1000 ease-linear"
+                    style={{ width: `${((6 - gameState.countdown) / 5) * 100}%` }}
+                  ></div>
+                </div>
               </div>
             )}
 
@@ -430,6 +462,34 @@ export default function YouTubeGunDuelOverlay() {
           </div>
         </div>
       </div>
+
+      {/* نافذة الإحصائيات */}
+      {showStats && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowStats(false)}>
+          <div className="bg-gray-900/90 rounded-2xl border border-cyan-400/50 p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-2xl font-bold text-white mb-4 text-center">📊 إحصائيات اللاعبين</h2>
+            <div className="space-y-2">
+              {stats.map((player, i) => (
+                <div key={i} className="flex justify-between items-center bg-gray-800/50 rounded-lg p-3">
+                  <span className="text-white font-medium">{player.username}</span>
+                  <div className="flex gap-4 text-sm">
+                    <span className="text-green-400">ف: {player.wins}</span>
+                    <span className="text-red-400">خ: {player.losses}</span>
+                    <span className="text-blue-400">نسبة: {player.winRate}%</span>
+                    <span className="text-yellow-400">متوسط: {player.avgReactionTime}ms</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowStats(false)}
+              className="mt-4 w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg transition-colors"
+            >
+              إغلاق
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 📋 شريط الانتظار السفلي (Lobby) */}
       <WaitingLobby players={waitingPlayers} />

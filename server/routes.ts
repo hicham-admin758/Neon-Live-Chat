@@ -530,5 +530,27 @@ export async function registerRoutes(
     }
   });
 
+  // API لعرض إحصائيات اللاعبين
+  app.get("/api/game/stats", async (req, res) => {
+    try {
+      const allUsers = await storage.getUsers();
+      const stats = allUsers
+        .filter(u => u.totalGames > 0)
+        .map(u => ({
+          username: u.username,
+          wins: u.wins,
+          losses: u.losses,
+          totalGames: u.totalGames,
+          winRate: u.totalGames > 0 ? ((u.wins / u.totalGames) * 100).toFixed(1) : 0,
+          avgReactionTime: u.avgReactionTime.toFixed(0)
+        }))
+        .sort((a, b) => b.totalGames - a.totalGames);
+
+      res.json({ stats });
+    } catch (error) {
+      console.error("❌ خطأ في جلب الإحصائيات:", error);
+      res.status(500).json({ message: "خطأ في جلب الإحصائيات" });
+    }
+  });
+
   return httpServer;
-}

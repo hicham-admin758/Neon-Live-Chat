@@ -276,15 +276,10 @@ export class YouTubeGunDuelGame {
         return;
       }
 
-      // 🎲 اختيار لاعبين عشوائيين من القائمة
-      const shuffled = [...activePlayers].sort(() => Math.random() - 0.5);
-      const player1 = shuffled[0]; // لاعب عشوائي 1
-      let player2 = shuffled[1]; // لاعب عشوائي 2
-
-      // التأكد من أن اللاعبين مختلفين
-      if (player1.id === player2.id) {
-        player2 = shuffled.find(p => p.id !== player1.id) || player2;
-      }
+      // � اختيار لاعبين ذكيين بناءً على المهارات (أقل وقت رد فعل)
+      const sortedBySkill = activePlayers.sort((a, b) => a.avgReactionTime - b.avgReactionTime);
+      const player1 = sortedBySkill[0]; // الأفضل
+      const player2 = sortedBySkill[1] || sortedBySkill[0]; // الثاني أو نفس إذا واحد فقط
 
       console.log(`🎯 بدء مبارزة عشوائية بين: ${player1.username} vs ${player2.username}`);
 
@@ -396,8 +391,37 @@ export class YouTubeGunDuelGame {
     }
   }
 
-  // 8. معالجة الإجابة (إطلاق النار)
-  private async handleGameInput(playerId: string, numberInput: number) {
+  // 8. تحديث إحصائيات اللاعبين
+  private async updatePlayerStats(winnerId: string, loserId: string, reactionTime: number) {
+    try {
+      // تحديث الفائز
+      const winner = await db.query.users.findFirst({
+        where: eq(users.externalId, winnerId)
+      });
+      if (winner) {
+        const newWins = winner.wins + 1;
+        const newTotal = winner.totalGames + 1;
+        const newAvg = ((winner.avgReactionTime * winner.totalGames) + reactionTime) / newTotal;
+        await db.update(users)
+          .set({ wins: newWins, totalGames: newTotal, avgReactionTime: newAvg })
+          .where(eq(users.externalId, winnerId));
+      }
+
+      // تحديث الخاسر
+      const loser = await db.query.users.findFirst({
+        where: eq(users.externalId, loserId)
+      });
+      if (loser) {
+        const newLosses = loser.losses + 1;
+        const newTotal = loser.totalGames + 1;
+        await db.update(users)
+          .set({ losses: newLosses, totalGames: newTotal })
+          .where(eq(users.externalId, loserId));
+      }
+    } catch (error) {
+      console.error("❌ خطأ في تحديث الإحصائيات:", error);
+    }
+  }
     if (!this.currentGame.isActive || !this.currentGame.targetNumber) return;
 
     const isLeft = this.currentGame.leftPlayer?.id === playerId;
@@ -417,6 +441,9 @@ export class YouTubeGunDuelGame {
       const reactionTime = Date.now() - (this.currentGame.startTime || 0);
 
       this.currentGame.isActive = false;
+
+      // تحديث الإحصائيات
+      await this.updatePlayerStats(winner.id, shooter.id, reactionTime);
 
       this.io.emit('shot_fired', {
         shooter: this.getPublicPlayerData(shooter),

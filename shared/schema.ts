@@ -9,6 +9,10 @@ export const users = sqliteTable("users", {
   externalId: text("external_id").unique(),
   lobbyStatus: text("lobby_status").default("active"), // active, in_game
   joinedAt: text("joined_at").default("CURRENT_TIMESTAMP"),
+  wins: integer("wins").default(0),
+  losses: integer("losses").default(0),
+  totalGames: integer("total_games").default(0),
+  avgReactionTime: real("avg_reaction_time").default(0),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, joinedAt: true });
