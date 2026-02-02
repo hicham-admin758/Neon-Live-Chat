@@ -111,7 +111,7 @@ const PlayerCard = ({ player, position, shotFired, isDead }: { player: Player | 
 };
 
 // 📋 مكون: شريط الانتظار (Lobby)
-const WaitingLobby = ({ players, onStartGame }: { players: WaitingPlayer[], onStartGame: () => void }) => (
+const WaitingLobby = ({ players }: { players: WaitingPlayer[] }) => (
   <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[95%] max-w-6xl bg-black/70 backdrop-blur-2xl rounded-3xl border border-white/20 p-6 flex items-center gap-6 overflow-hidden animate-[slideUp_0.5s_ease-out] shadow-[0_0_40px_rgba(0,0,0,0.5)]">
     <div className="flex items-center gap-4 px-6 border-r border-white/30 min-w-fit relative">
       <div className="relative">
@@ -123,57 +123,6 @@ const WaitingLobby = ({ players, onStartGame }: { players: WaitingPlayer[], onSt
         <span className="text-cyan-400 text-lg font-bold drop-shadow-[0_0_5px_rgba(34,211,238,0.6)]">{players.length} لاعبين</span>
       </div>
     </div>
-
-    {/* زر بدء اللعبة */}
-    {players.length >= 2 && (
-      <div className="flex items-center gap-4 px-6 border-r border-white/30 min-w-fit">
-        <button
-          onClick={onStartGame}
-          className="bg-gradient-to-r from-red-600 to-red-800 hover:from-red-700 hover:to-red-900 text-white font-bold py-3 px-6 rounded-xl border border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:shadow-[0_0_30px_rgba(239,68,68,0.6)] transition-all duration-300 transform hover:scale-105"
-        >
-          🔫 بدء المبارزة
-        </button>
-      </div>
-    )}
-
-    {/* زر إضافة لاعبين تجريبيين */}
-    <div className="flex items-center gap-4 px-6 border-r border-white/30 min-w-fit">
-      <button
-        onClick={async () => {
-          try {
-            // إضافة لاعبين تجريبيين عبر API
-            await fetch("/api/game/add-test-players", { method: "POST" });
-            // إعادة تحميل الصفحة لتحديث القائمة
-            setTimeout(() => window.location.reload(), 500);
-          } catch (e) {
-            console.error("Failed to add test players", e);
-          }
-        }}
-        className="bg-gradient-to-r from-purple-600 to-purple-800 hover:from-purple-700 hover:to-purple-900 text-white font-bold py-2 px-4 rounded-lg border border-purple-500/50 shadow-[0_0_15px_rgba(147,51,234,0.4)] hover:shadow-[0_0_20px_rgba(147,51,234,0.6)] transition-all duration-300 transform hover:scale-105 text-sm"
-      >
-        🧪 إضافة لاعبين تجريبيين
-      </button>
-    </div>
-
-    {/* زر تصفير القائمة */}
-    {players.length > 0 && (
-      <div className="flex items-center gap-4 px-6 border-r border-white/30 min-w-fit">
-        <button
-          onClick={async () => {
-            try {
-              await fetch("/api/game/clear-participants", { method: "POST" });
-              // إعادة تحميل الصفحة لتحديث القائمة
-              window.location.reload();
-            } catch (e) {
-              console.error("Failed to reset lobby", e);
-            }
-          }}
-          className="bg-gradient-to-r from-gray-600 to-gray-800 hover:from-gray-700 hover:to-gray-900 text-white font-bold py-2 px-4 rounded-lg border border-gray-500/50 shadow-[0_0_15px_rgba(107,114,128,0.4)] hover:shadow-[0_0_20px_rgba(107,114,128,0.6)] transition-all duration-300 transform hover:scale-105 text-sm"
-        >
-          🗑️ تصفير القائمة
-        </button>
-      </div>
-    )}
 
     <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide w-full mask-linear-fade">
       {players.length === 0 ? (
@@ -240,13 +189,6 @@ export default function YouTubeGunDuelOverlay() {
     if (audio) {
       audio.currentTime = 0;
       audio.play().catch(() => {});
-    }
-  };
-
-  // � دالة بدء اللعبة يدوياً
-  const handleStartGame = () => {
-    if (socketRef.current) {
-      socketRef.current.emit('start_gun_duel');
     }
   };
 
@@ -490,7 +432,7 @@ export default function YouTubeGunDuelOverlay() {
       </div>
 
       {/* 📋 شريط الانتظار السفلي (Lobby) */}
-      <WaitingLobby players={waitingPlayers} onStartGame={handleStartGame} />
+      <WaitingLobby players={waitingPlayers} />
 
       {/* CSS Animations المحسنة */}
       <style>{`

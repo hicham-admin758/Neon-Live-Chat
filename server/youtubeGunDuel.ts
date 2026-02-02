@@ -85,12 +85,6 @@ export class YouTubeGunDuelGame {
         console.error('❌ خطأ في مزامنة الشاشة:', error);
       }
 
-      // ✅ معالجة طلب بدء اللعبة من الواجهة
-      socket.on('start_gun_duel', async () => {
-        console.log("🎯 تم طلب بدء لعبة المسدسات من الواجهة");
-        await this.startGameFromActivePlayers();
-      });
-
       // معالجة طلب القائمة
       socket.on('get_waiting_players', async () => {
         try {
