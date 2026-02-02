@@ -418,6 +418,18 @@ export default function YouTubeGunDuelOverlay() {
               </div>
             )}
 
+            {/* مرحلة الاستعداد */}
+            {gameState.status === 'ready' && (
+              <div className="relative animate-pulse">
+                <div className="text-[8rem] font-black text-green-400 drop-shadow-2xl animate-[ping_1s_infinite]">
+                  استعداد
+                </div>
+                <div className="absolute inset-0 text-[8rem] font-black text-green-400/50 blur-sm animate-[ping_1s_infinite] scale-110">
+                  استعداد
+                </div>
+              </div>
+            )}
+
             {/* الرقم المستهدف مع تحسينات */}
             {gameState.status === 'playing' && gameState.targetNumber && (
               <div className="relative group animate-[popIn_0.2s_ease-out]">
