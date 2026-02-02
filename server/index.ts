@@ -6,96 +6,13 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { YouTubeGunDuelGame } from "./youtubeGunDuel"; // تأكد من وجود هذا الملف في نفس المجلد
 
-(async () => {
-  try {
-const httpServer = createServer(app);
-
-// 1. إعداد Socket.io للاتصال بالواجهة (Overlay)
-const io = new Server(httpServer, {
-  path: "/socket.io",
-  cors: { origin: "*" },
-  transports: ['websocket', 'polling']
-});
-
-// 2. تشغيل محرك لعبة اليوتيوب
-// سيستخدم المفتاح السري من الـ Secrets في Replit
-const youtubeGame = new YouTubeGunDuelGame(io, process.env.YOUTUBE_API_KEY || "");
-
-// 🎯 دالة استخراج Video ID من رابط اليوتيوب
-function extractYouTubeVideoId(url: string): string | null {
-  try {
-    // إزالة المسافات والتأكد من وجود قيمة
-    const cleanUrl = url.trim();
-    if (!cleanUrl) return null;
-
-    // إذا كان المدخل هو ID فقط (11 حرف)
-    if (/^[a-zA-Z0-9_-]{11}$/.test(cleanUrl)) {
-      return cleanUrl;
-    }
-
-    // محاولة تحويل النص لـ URL
-    let urlObj: URL;
-    try {
-      urlObj = new URL(cleanUrl);
-    } catch {
-      // إذا لم يكن URL كامل، نحاول إضافة البروتوكول
-      urlObj = new URL(`https://${cleanUrl}`);
-    }
-
-    const hostname = urlObj.hostname.toLowerCase();
-
-    // 1️⃣ روابط youtube.com العادية
-    // مثال: https://www.youtube.com/watch?v=dQw4w9WgXcQ
-    if (hostname.includes('youtube.com')) {
-      // استخراج من query parameter "v"
-      const videoId = urlObj.searchParams.get('v');
-      if (videoId && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
-        return videoId;
-      }
-
-      // 2️⃣ روابط البث المباشر
-      // مثال: https://www.youtube.com/live/dQw4w9WgXcQ
-      const liveMatch = urlObj.pathname.match(/\/live\/([a-zA-Z0-9_-]{11})/);
-      if (liveMatch && liveMatch[1]) {
-        return liveMatch[1];
-      }
-
-      // 3️⃣ روابط embed
-      // مثال: https://www.youtube.com/embed/dQw4w9WgXcQ
-      const embedMatch = urlObj.pathname.match(/\/embed\/([a-zA-Z0-9_-]{11})/);
-      if (embedMatch && embedMatch[1]) {
-        return embedMatch[1];
-      }
-
-      // 4️⃣ روابط v/
-      // مثال: https://www.youtube.com/v/dQw4w9WgXcQ
-      const vMatch = urlObj.pathname.match(/\/v\/([a-zA-Z0-9_-]{11})/);
-      if (vMatch && vMatch[1]) {
-        return vMatch[1];
-      }
-    }
-
-    // 5️⃣ روابط youtu.be المختصرة
-    // مثال: https://youtu.be/dQw4w9WgXcQ
-    if (hostname.includes('youtu.be')) {
-      const shortMatch = urlObj.pathname.match(/\/([a-zA-Z0-9_-]{11})/);
-      if (shortMatch && shortMatch[1]) {
-        return shortMatch[1];
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error parsing YouTube URL:', error);
-    return null;
-  }
-}
-
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
   }
 }
+
+(async () => {
 
 app.use(
   express.json({
