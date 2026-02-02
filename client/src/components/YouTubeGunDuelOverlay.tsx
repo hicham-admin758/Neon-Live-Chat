@@ -17,7 +17,7 @@ interface WaitingPlayer {
 }
 
 interface GameState {
-  status: 'waiting' | 'countdown' | 'playing' | 'finished';
+  status: 'waiting' | 'countdown' | 'ready' | 'playing' | 'finished';
   targetNumber: number | null;
   winner: Player | null;
   leftPlayer: Player | null;
@@ -234,7 +234,13 @@ export default function YouTubeGunDuelOverlay() {
       if (seconds <= 3 && seconds > 0) playSound("countdown");
     });
 
-    // 4. ظهور الهدف
+    // 4. مرحلة الاستعداد
+    socket.on("game_ready", () => {
+      setGameState(prev => ({ ...prev, status: 'ready' }));
+      playSound("victory"); // أو صوت مناسب للاستعداد
+    });
+
+    // 5. ظهور الهدف
     socket.on("show_target", ({ number }) => {
       setGameState(prev => ({ ...prev, status: 'playing', targetNumber: number }));
     });
