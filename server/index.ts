@@ -22,6 +22,12 @@ declare module "http" {
                               console.log(`${formattedTime} [${source}] ${message}`);
                               }
 
+                              // دالة استخراج Video ID من رابط يوتيوب
+                              function extractYouTubeVideoId(url: string): string | null {
+                                const match = url.match(/(?:v=|\/live\/|\/embed\/|youtu\.be\/)([^?&]+)/);
+                                return match ? match[1] : null;
+                              }
+
                               (async () => {
 
                               const app = express();
