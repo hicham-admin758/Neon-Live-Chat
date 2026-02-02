@@ -4,8 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import { YouTubeGunDuelGame } from "./youtubeGunDuel";
-import { storage } from "./storage"; 
+import { YouTubeGunDuelGame } from "./youtubeGunDuel"; 
 
 declare module "http" {
   interface IncomingMessage {
@@ -53,21 +52,7 @@ function extractYouTubeVideoId(input: string): string | null {
       },
     });
 
-    const youtubeGame = new YouTubeGunDuelGame(io, process.env.YOUTUBE_API_KEY || "");
-
-    // فحص Auto-Start عند بدء السيرفر
-    (async () => {
-      try {
-        const users = await storage.getUsers();
-        const activePlayers = users.filter(u => u.lobbyStatus === "active");
-        if (activePlayers.length >= 2) {
-          console.log(`🎮 Auto-Start عند بدء السيرفر: ${activePlayers.length} لاعبين`);
-          await youtubeGame.startGameFromActivePlayers(activePlayers);
-        }
-      } catch (error) {
-        console.error("❌ خطأ في Auto-Start عند بدء السيرفر:", error);
-      }
-    })();
+    const youtubeGame = new YouTubeGunDuelGame(io);
 
     app.use((req, res, next) => {
       const start = Date.now();
@@ -93,8 +78,8 @@ function extractYouTubeVideoId(input: string): string | null {
       next();
     });
 
-    // تسجيل المسارات الأساسية قبل أي middleware آخر
-    await registerRoutes(httpServer, app, io, youtubeGame);
+    // تسجيل المسارات الأساسية
+    await registerRoutes(httpServer, app);
 
     // 3. إضافة API لبدء مراقبة بث يوتيوب من الموقع
     app.post("/api/youtube/start", async (req, res) => {
@@ -195,7 +180,7 @@ function extractYouTubeVideoId(input: string): string | null {
       serveStatic(app);
     } else {
       const { setupVite } = await import("./vite");
-      await setupVite(httpServer, app, io, youtubeGame);
+      await setupVite(httpServer, app);
     }
 
     const port = parseInt(process.env.PORT || "5000", 10);
