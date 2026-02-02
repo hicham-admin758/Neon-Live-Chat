@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import { db } from "./db";
 import { users } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
+import { storage } from "./storage";
 
 // تعريف أنواع البيانات
 interface Player {
@@ -57,9 +58,7 @@ export class YouTubeGunDuelGame {
 
       try {
         // جلب اللاعبين النشطين (من لعبة القنبلة)
-        const activePlayers = await db.query.users.findMany({
-          where: eq(users.lobbyStatus, 'active')
-        });
+        const activePlayers = await storage.getUsers();
 
         // إرسال القائمة للشاشة الجديدة
         socket.emit('players_waiting', { 
@@ -95,9 +94,7 @@ export class YouTubeGunDuelGame {
       // معالجة طلب القائمة
       socket.on('get_waiting_players', async () => {
         try {
-          const activePlayers = await db.query.users.findMany({
-            where: eq(users.lobbyStatus, 'active')
-          });
+          const activePlayers = await storage.getUsers();
 
           socket.emit('players_waiting', { 
             count: activePlayers.length, 
@@ -228,9 +225,7 @@ export class YouTubeGunDuelGame {
       }
 
       // جلب القائمة المحدثة
-      const activePlayers = await db.query.users.findMany({
-        where: eq(users.lobbyStatus, 'active')
-      });
+      const activePlayers = await storage.getUsers();
 
       // ✅ تحديث الواجهة (كل اللاعبين يظهرون في القائمة السفلية)
       this.io.emit('players_waiting', { 
@@ -270,9 +265,7 @@ export class YouTubeGunDuelGame {
       }
 
       // جلب اللاعبين النشطين
-      const activePlayers = await db.query.users.findMany({
-        where: eq(users.lobbyStatus, 'active')
-      });
+      const activePlayers = await storage.getUsers();
 
       if (activePlayers.length < 2) {
         console.log(`⚠️ عدد اللاعبين غير كافٍ: ${activePlayers.length}/2`);
