@@ -6,7 +6,8 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { YouTubeGunDuelGame } from "./youtubeGunDuel"; // تأكد من وجود هذا الملف في نفس المجلد
 
-const app = express();
+(async () => {
+  try {
 const httpServer = createServer(app);
 
 // 1. إعداد Socket.io للاتصال بالواجهة (Overlay)
@@ -258,4 +259,8 @@ app.use((req, res, next) => {
       log(`YouTube Gun Duel Engine is Ready! 🎮`, "YouTubeGame");
     },
   );
+  } catch (error) {
+    console.error("Fatal error starting server:", error);
+    process.exit(1);
+  }
 })();
