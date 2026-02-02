@@ -221,6 +221,8 @@ export class YouTubeGunDuelGame {
       // جلب القائمة المحدثة
       const activePlayers = await storage.getUsers();
 
+      console.log(`📋 بعد الانضمام: ${activePlayers.length} لاعب نشط`);
+
       // ✅ تحديث الواجهة (كل اللاعبين يظهرون في القائمة السفلية)
       this.io.emit('players_waiting', { 
         count: activePlayers.length,
@@ -235,14 +237,7 @@ export class YouTubeGunDuelGame {
       // 🚀 ✅ منطق Auto-Start الجديد
       if (activePlayers.length >= 2 && !this.currentGame.isActive) {
         console.log(`🎮 Auto-Start: تم الوصول إلى ${activePlayers.length} لاعبين - بدء اللعبة تلقائياً...`);
-
-        // تأخير بسيط (ثانيتين) قبل البدء لإعطاء فرصة للمزيد من اللاعبين للانضمام
-        setTimeout(async () => {
-          // تحقق مرة أخرى من أن اللعبة لم تبدأ في هذه الأثناء
-          if (!this.currentGame.isActive) {
-            await this.startGameFromActivePlayers();
-          }
-        }, 2000);
+        await this.startGameFromActivePlayers();
       }
 
     } catch (error) {
@@ -263,6 +258,8 @@ export class YouTubeGunDuelGame {
 
       // جلب اللاعبين النشطين
       const activePlayers = await storage.getUsers();
+
+      console.log(`🎮 بدء اللعبة: ${activePlayers.length} لاعب نشط`);
 
       // 🧪 وضع تجريبي: إذا لم يكن هناك لاعبين كافيين، أضف لاعبين وهميين
       if (activePlayers.length < 2) {
