@@ -62,7 +62,7 @@ function extractYouTubeVideoId(input: string): string | null {
         const activePlayers = users.filter(u => u.lobbyStatus === "active");
         if (activePlayers.length >= 2) {
           console.log(`🎮 Auto-Start عند بدء السيرفر: ${activePlayers.length} لاعبين`);
-          await youtubeGame.startGameFromActivePlayers();
+          await youtubeGame.startGameFromActivePlayers(activePlayers);
         }
       } catch (error) {
         console.error("❌ خطأ في Auto-Start عند بدء السيرفر:", error);

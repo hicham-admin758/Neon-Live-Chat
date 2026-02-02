@@ -237,7 +237,7 @@ export class YouTubeGunDuelGame {
       // 🚀 ✅ منطق Auto-Start الجديد
       if (activePlayers.length >= 2 && !this.currentGame.isActive) {
         console.log(`🎮 Auto-Start: تم الوصول إلى ${activePlayers.length} لاعبين - بدء اللعبة تلقائياً...`);
-        await this.startGameFromActivePlayers();
+        await this.startGameFromActivePlayers(activePlayers);
       }
 
     } catch (error) {
@@ -249,43 +249,22 @@ export class YouTubeGunDuelGame {
   // الفكرة: اللاعبون النشطين = المتابعين الذين كتبوا !دخول
   // يتم اختيار اثنين منهم كأهداف في الساحة
   // الآخرون يحاولون إطلاق النار عليهم بكتابة الرقم أولاً
-  async startGameFromActivePlayers() {
+  async startGameFromActivePlayers(specificPlayers?: any[]) {
     try {
       if (this.currentGame.isActive) {
         console.log("⚠️ هناك لعبة جارية بالفعل");
         return;
       }
 
-      // جلب اللاعبين النشطين
-      const activePlayers = await storage.getUsers();
+      // جلب اللاعبين النشطين أو استخدام المحددين
+      const activePlayers = specificPlayers || await storage.getUsers();
 
       console.log(`🎮 بدء اللعبة: ${activePlayers.length} لاعب نشط`);
 
-      // 🧪 وضع تجريبي: إذا لم يكن هناك لاعبين كافيين، أضف لاعبين وهميين
+      // تتطلب اللعبة بالضبط لاعبين اثنين
       if (activePlayers.length < 2) {
-        console.log("🧪 وضع تجريبي: إضافة لاعبين وهميين للاختبار");
-
-        // إضافة لاعبين وهميين
-        const dummyPlayers = [
-          {
-            id: 999,
-            username: "لاعب تجريبي 1",
-            avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=dummy1",
-            externalId: "dummy1",
-            lobbyStatus: "active" as const,
-            joinedAt: new Date().toISOString()
-          },
-          {
-            id: 1000,
-            username: "لاعب تجريبي 2",
-            avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=dummy2",
-            externalId: "dummy2",
-            lobbyStatus: "active" as const,
-            joinedAt: new Date().toISOString()
-          }
-        ];
-
-        activePlayers.push(...dummyPlayers);
+        console.log(`⚠️ اللعبة تتطلب بالضبط لاعبين اثنين: ${activePlayers.length}/2`);
+        return;
       }
 
       // تتطلب اللعبة بالضبط لاعبين اثنين
@@ -300,7 +279,12 @@ export class YouTubeGunDuelGame {
       // 🎲 اختيار لاعبين عشوائيين من القائمة
       const shuffled = [...activePlayers].sort(() => Math.random() - 0.5);
       const player1 = shuffled[0]; // لاعب عشوائي 1
-      const player2 = shuffled[1]; // لاعب عشوائي 2
+      let player2 = shuffled[1]; // لاعب عشوائي 2
+
+      // التأكد من أن اللاعبين مختلفين
+      if (player1.id === player2.id) {
+        player2 = shuffled.find(p => p.id !== player1.id) || player2;
+      }
 
       console.log(`🎯 بدء مبارزة عشوائية بين: ${player1.username} vs ${player2.username}`);
 
@@ -358,41 +342,58 @@ export class YouTubeGunDuelGame {
 
   // 6. العد التنازلي مع مرحلة الاستعداد
   private startCountdown() {
-    let count = 5;
+    try {
+      let count = 5;
 
-    this.io.emit('countdown_tick', { seconds: count });
-    console.log(`⏱️ العد التنازلي: ${count}`);
+      this.io.emit('countdown_tick', { seconds: count });
+      console.log(`⏱️ العد التنازلي: ${count}`);
 
-    this.currentGame.countdownTimer = setInterval(() => {
-      if (count <= 1) {
-        // مرحلة الاستعداد
-        this.io.emit('game_ready');
-        console.log(`🎯 مرحلة الاستعداد - اللاعبون مستعدون!`);
+      this.currentGame.countdownTimer = setInterval(() => {
+        try {
+          if (count <= 1) {
+            // مرحلة الاستعداد
+            this.io.emit('game_ready');
+            console.log(`🎯 مرحلة الاستعداد - اللاعبون مستعدون!`);
 
-        if (this.currentGame.countdownTimer) clearInterval(this.currentGame.countdownTimer);
+            if (this.currentGame.countdownTimer) clearInterval(this.currentGame.countdownTimer);
 
-        // انتظار ثانية واحدة لمرحلة الاستعداد ثم توليد الرقم
-        setTimeout(() => {
-          this.generateTarget();
-        }, 1000);
+            // انتظار ثانية واحدة لمرحلة الاستعداد ثم توليد الرقم
+            setTimeout(() => {
+              this.generateTarget();
+            }, 1000);
 
-        return;
-      } else {
-        count--;
-        this.io.emit('countdown_tick', { seconds: count });
-        console.log(`⏱️ العد التنازلي: ${count}`);
-      }
-    }, 1000);
+            return;
+          } else {
+            count--;
+            this.io.emit('countdown_tick', { seconds: count });
+            console.log(`⏱️ العد التنازلي: ${count}`);
+          }
+        } catch (error) {
+          console.error("❌ خطأ في العد التنازلي:", error);
+          if (this.currentGame.countdownTimer) clearInterval(this.currentGame.countdownTimer);
+          this.resetGame();
+        }
+      }, 1000);
+    } catch (error) {
+      console.error("❌ خطأ في بدء العد التنازلي:", error);
+      this.resetGame();
+    }
   }
 
   // 7. توليد الرقم الهدف
   private generateTarget() {
-    const target = Math.floor(Math.random() * 9000) + 1000; // 1000-9999
-    this.currentGame.targetNumber = target;
-    this.currentGame.startTime = Date.now();
+    try {
+      const target = Math.floor(Math.random() * 9000) + 1000; // 1000-9999
+      this.currentGame.targetNumber = target;
+      this.currentGame.startTime = Date.now();
 
-    this.io.emit('show_target', { number: target });
-    console.log(`🎯 الهدف: ${target}`);
+      this.io.emit('show_target', { number: target });
+      console.log(`🎯 الهدف: ${target}`);
+    } catch (error) {
+      console.error("❌ خطأ في توليد الهدف:", error);
+      // إعادة المحاولة أو إعادة الضبط
+      this.resetGame();
+    }
   }
 
   // 8. معالجة الإجابة (إطلاق النار)
