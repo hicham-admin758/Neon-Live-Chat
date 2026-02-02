@@ -8,16 +8,9 @@ import { YouTubeGunDuelGame } from "./youtubeGunDuel";
 
 export async function registerRoutes(
   httpServer: Server,
-  app: Express
+  app: Express,
+  io: SocketIOServer
 ): Promise<Server> {
-  const io = new SocketIOServer(httpServer, {
-    path: "/socket.io",
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
-    },
-  });
-
   const YT_API_KEY = process.env.YOUTUBE_API_KEY;
   let activeLiveChatId: string | null = null;
   let pollingInterval: NodeJS.Timeout | null = null;
@@ -92,6 +85,12 @@ export async function registerRoutes(
 
   // الدالة الرئيسية لاستطلاع الشات (The Brain)
   async function pollChat() {
+    // إيقاف الاستطلاع إذا كانت لعبة المسدسات نشطة لتجنب الاستطلاع المزدوج
+    if (gunDuelGame && gunDuelGame.isActive()) {
+      console.log("⏸️ لعبة المسدسات نشطة - إيقاف استطلاع القنبلة");
+      return;
+    }
+
     if (!activeLiveChatId || !YT_API_KEY || isPolling) {
       if (!activeLiveChatId) console.log("⏸️ لا يوجد Live Chat ID نشط");
       if (!YT_API_KEY) console.log("⏸️ لا يوجد YouTube API Key");

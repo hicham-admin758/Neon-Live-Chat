@@ -42,8 +42,16 @@ export class YouTubeGunDuelGame {
   constructor(io: Server, apiKey: string) {
     this.io = io;
     this.youtube = google.youtube({ version: "v3", auth: apiKey });
+    this.setupSocketListeners();
+  }
 
-    // ✅ إرسال القائمة فور اتصال الشاشة
+  // دالة للتحقق من نشاط اللعبة
+  public isActive(): boolean {
+    return this.currentGame.isActive;
+  }
+
+  // ✅ إرسال القائمة فور اتصال الشاشة
+  private setupSocketListeners() {
     this.io.on('connection', async (socket) => {
       console.log("🔌 شاشة جديدة اتصلت - إرسال البيانات...");
 
@@ -152,7 +160,8 @@ export class YouTubeGunDuelGame {
       console.error("❌ خطأ في استطلاع الشات:", error);
     }
 
-    setTimeout(() => this.pollChat(), 1500);
+    // زيادة فترة الاستطلاع لتجنب تجاوز حد YouTube API
+    setTimeout(() => this.pollChat(), 10000); // 10 ثواني بدلاً من 1.5
   }
 
   // 3. تحليل الرسالة
