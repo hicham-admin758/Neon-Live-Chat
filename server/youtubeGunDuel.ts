@@ -164,8 +164,11 @@ export class YouTubeGunDuelGame {
 
     if (!text || !authorId || !authorName) return;
 
+    console.log(`📨 رسالة من ${authorName}: ${text}`);
+
     // ✅ الأمر: !دخول - إضافة للقائمة (مشترك مع لعبة القنبلة)
     if (text === "!دخول" || text.toLowerCase() === "!join") {
+      console.log(`✅ تم التعرف على أمر !دخول من ${authorName}`);
       await this.handleJoinCommand(authorId, authorName, authorAvatar || undefined);
     }
 
