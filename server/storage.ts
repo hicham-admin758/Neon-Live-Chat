@@ -42,7 +42,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAllUsers(): Promise<void> {
-    await db.delete(users);
+    try {
+      await db.delete(users);
+    } catch (error) {
+      // إذا فشل الحذف، حاول تحديث الحالة بدلاً من ذلك
+      console.log("Failed to delete users, resetting status instead");
+      await this.resetAllUsersStatus();
+    }
   }
 }
 

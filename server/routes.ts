@@ -395,7 +395,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/game/clear-participants", async (req, res) => {
-    await storage.deleteAllUsers();
+    await storage.resetAllUsersStatus();
     currentBombHolderId = null;
     io.emit("game_reset");
     res.json({ success: true });

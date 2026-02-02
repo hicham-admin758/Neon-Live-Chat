@@ -136,11 +136,36 @@ const WaitingLobby = ({ players, onStartGame }: { players: WaitingPlayer[], onSt
       </div>
     )}
 
+    {/* زر تصفير القائمة */}
+    {players.length > 0 && (
+      <div className="flex items-center gap-4 px-6 border-r border-white/30 min-w-fit">
+        <button
+          onClick={async () => {
+            try {
+              await fetch("/api/game/clear-participants", { method: "POST" });
+              // إعادة تحميل الصفحة لتحديث القائمة
+              window.location.reload();
+            } catch (e) {
+              console.error("Failed to reset lobby", e);
+            }
+          }}
+          className="bg-gradient-to-r from-gray-600 to-gray-800 hover:from-gray-700 hover:to-gray-900 text-white font-bold py-2 px-4 rounded-lg border border-gray-500/50 shadow-[0_0_15px_rgba(107,114,128,0.4)] hover:shadow-[0_0_20px_rgba(107,114,128,0.6)] transition-all duration-300 transform hover:scale-105 text-sm"
+        >
+          🗑️ تصفير القائمة
+        </button>
+      </div>
+    )}
+
     <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide w-full mask-linear-fade">
       {players.length === 0 ? (
         <div className="flex items-center gap-4 py-2 px-4 bg-white/5 rounded-xl border border-white/10">
           <div className="text-2xl animate-pulse">⏳</div>
-          <span className="text-white/60 italic text-lg">في انتظار انضمام اللاعبين (اكتب !دخول)...</span>
+          <span className="text-white/60 italic text-lg">في انتظار انضمام اللاعبين (اكتب !دخول في شات يوتيوب)</span>
+        </div>
+      ) : players.length === 1 ? (
+        <div className="flex items-center gap-4 py-2 px-4 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
+          <div className="text-2xl">👤</div>
+          <span className="text-yellow-400 text-lg">انتظر لاعب آخر للبدء (اكتب !دخول في شات يوتيوب)</span>
         </div>
       ) : (
         players.map((p, i) => (
