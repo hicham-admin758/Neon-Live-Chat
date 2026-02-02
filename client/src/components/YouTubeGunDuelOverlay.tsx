@@ -184,7 +184,6 @@ const WaitingLobby = ({ players }: { players: WaitingPlayer[] }) => {
   </div>
 );
 
-// 🚀 المكون الرئيسي
 export default function YouTubeGunDuelOverlay() {
   const [gameState, setGameState] = useState<GameState>({
     status: 'waiting',

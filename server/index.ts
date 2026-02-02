@@ -4,7 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import { YouTubeGunDuelGame } from "./youtubeGunDuel"; 
+import { YouTubeGunDuelGame } from "./youtubeGunDuel";
 
 declare module "http" {
   interface IncomingMessage {
@@ -28,7 +28,7 @@ function extractYouTubeVideoId(input: string): string | null {
   if (/^[a-zA-Z0-9_-]{11}$/.test(input)) {
     return input;
   }
-  
+
   // استخراج من الروابط المختلفة
   const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
   const match = input.match(regex);
