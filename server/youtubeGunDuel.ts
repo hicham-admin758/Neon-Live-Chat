@@ -267,50 +267,44 @@ export class YouTubeGunDuelGame {
         return;
       }
 
-      // جلب المتابعين النشطين (الذين كتبوا !دخول)
-      const activeFollowers = await storage.getUsers();
+      // جلب اللاعبين النشطين
+      const activePlayers = await storage.getUsers();
 
-      if (activeFollowers.length < 2) {
-        console.log(`⚠️ عدد المتابعين غير كافٍ: ${activeFollowers.length}/2`);
-        this.io.emit('error_message', { 
-          message: 'يجب وجود متابعين على الأقل! (اكتب !دخول للانضمام)' 
+      // تتطلب اللعبة بالضبط لاعبين اثنين
+      if (activePlayers.length !== 2) {
+        console.log(`⚠️ اللعبة تتطلب بالضبط لاعبين اثنين: ${activePlayers.length}/2`);
+        this.io.emit('error_message', {
+          message: 'يجب وجود لاعبين اثنين فقط! (اكتب !دخول للانضمام)'
         });
         return;
       }
 
-      console.log(`🎲 اختيار متابعين عشوائيين من ${activeFollowers.length} متابع...`);
-
-      // 🎲 اختيار عشوائي للأهداف
-      const shuffled = [...activeFollowers].sort(() => Math.random() - 0.5);
-      const target1 = shuffled[0]; // هدف على اليسار
-      const target2 = shuffled[1]; // هدف على اليمين
-
-      console.log(`🎯 تم اختيار الأهداف: ${target1.username} (يسار) vs ${target2.username} (يمين)`);
+      console.log(`🎯 بدء مبارزة بين: ${activePlayers[0].username} vs ${activePlayers[1].username}`);
 
       // تحديث حالتهم إلى "في اللعبة"
       await db.update(users)
         .set({ lobbyStatus: 'in_game' })
-        .where(eq(users.externalId, target1.externalId!));
+        .where(eq(users.externalId, activePlayers[0].externalId!));
 
       await db.update(users)
         .set({ lobbyStatus: 'in_game' })
-        .where(eq(users.externalId, target2.externalId!));
+        .where(eq(users.externalId, activePlayers[1].externalId!));
 
-      // إعداد اللعبة مع الأهداف
+      // إعداد اللعبة - اللاعب الأول على اليمين، الثاني على اليسار
       this.currentGame = {
-        leftPlayer: { 
-          id: target1.externalId!, 
-          username: target1.username, 
-          avatarUrl: target1.avatarUrl || undefined, 
-          position: 'left', 
-          isAlive: true 
+        leftPlayer: {
+          id: activePlayers[1].externalId!,
+          username: activePlayers[1].username,
+          avatarUrl: activePlayers[1].avatarUrl || undefined,
+          position: 'left',
+          isAlive: true
         },
-        rightPlayer: { 
-          id: target2.externalId!, 
-          username: target2.username, 
-          avatarUrl: target2.avatarUrl || undefined, 
-          position: 'right', 
-          isAlive: true 
+        rightPlayer: {
+          id: activePlayers[0].externalId!,
+          username: activePlayers[0].username,
+          avatarUrl: activePlayers[0].avatarUrl || undefined,
+          position: 'right',
+          isAlive: true
         },
         targetNumber: null,
         isActive: true,
@@ -318,26 +312,19 @@ export class YouTubeGunDuelGame {
         startTime: null
       };
 
-      // ✅ تحديث القائمة السفلية (إزالة الأهداف المختارة)
-      const remainingFollowers = activeFollowers.filter(
-        f => f.externalId !== target1.externalId && f.externalId !== target2.externalId
-      );
-
-      this.io.emit('players_waiting', { 
-        count: remainingFollowers.length,
-        players: remainingFollowers.map(f => ({ 
-          username: f.username, 
-          avatarUrl: f.avatarUrl 
-        }))
+      // إفراغ قائمة الانتظار (اللاعبان في اللعبة الآن)
+      this.io.emit('players_waiting', {
+        count: 0,
+        players: []
       });
 
-      // بدء المشهد مع الأهداف
+      // بدء المبارزة
       this.io.emit('game_started', {
         leftPlayer: this.getPublicPlayerData(this.currentGame.leftPlayer!),
         rightPlayer: this.getPublicPlayerData(this.currentGame.rightPlayer!)
       });
 
-      console.log(`🎮 بدأت المبارزة! الأهداف: ${target1.username} vs ${target2.username}`);
+      console.log(`🎮 بدأت المبارزة: ${activePlayers[0].username} (يمين) vs ${activePlayers[1].username} (يسار)`);
       this.startCountdown();
 
     } catch (error) {
@@ -346,7 +333,7 @@ export class YouTubeGunDuelGame {
     }
   }
 
-  // 6. العد التنازلي
+  // 6. العد التنازلي مع مرحلة الاستعداد
   private startCountdown() {
     let count = 5;
 
@@ -360,7 +347,17 @@ export class YouTubeGunDuelGame {
 
       if (count <= 0) {
         if (this.currentGame.countdownTimer) clearInterval(this.currentGame.countdownTimer);
-        this.generateTarget();
+
+        // مرحلة الاستعداد
+        this.io.emit('game_ready');
+        console.log(`🎯 مرحلة الاستعداد - اللاعبون مستعدون!`);
+
+        // انتظار ثانيتين لمرحلة الاستعداد ثم توليد الرقم
+        setTimeout(() => {
+          this.generateTarget();
+        }, 2000);
+
+        return;
       }
     }, 1000);
   }
