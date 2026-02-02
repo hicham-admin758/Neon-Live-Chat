@@ -92,9 +92,15 @@ export async function registerRoutes(
 
   // الدالة الرئيسية لاستطلاع الشات (The Brain)
   async function pollChat() {
-    if (!activeLiveChatId || !YT_API_KEY || isPolling) return;
+    if (!activeLiveChatId || !YT_API_KEY || isPolling) {
+      if (!activeLiveChatId) console.log("⏸️ لا يوجد Live Chat ID نشط");
+      if (!YT_API_KEY) console.log("⏸️ لا يوجد YouTube API Key");
+      if (isPolling) console.log("⏸️ المراقبة قيد التشغيل بالفعل");
+      return;
+    }
 
     isPolling = true;
+    console.log(`🔍 بدء مراقبة الشات - Live Chat ID: ${activeLiveChatId}`);
 
     try {
       let url = `https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${activeLiveChatId}&part=snippet,authorDetails&maxResults=200&key=${YT_API_KEY}`;
@@ -131,8 +137,11 @@ export async function registerRoutes(
         // 1️⃣ منطق الانضمام (Join Logic)
         const isJoinCommand = text.includes("!دخول") || /!?(دخول|join|انضمام)/i.test(text);
         if (isJoinCommand) {
+           console.log(`🎯 تم اكتشاف أمر انضمام من ${author.displayName}: "${text}"`);
+           
            const existing = await storage.getUserByUsername(author.displayName);
            if (!existing) {
+             console.log(`➕ إنشاء لاعب جديد: ${author.displayName}`);
              const user = await storage.createUser({
                username: author.displayName,
                avatarUrl: author.profileImageUrl,
@@ -140,11 +149,14 @@ export async function registerRoutes(
                lobbyStatus: "active"
              });
              io.emit("new_player", user);
-             console.log(`✅ لاعب جديد انضم: ${author.displayName}`);
+             console.log(`✅ تم إضافة اللاعب الجديد: ${author.displayName}`);
            } else if (existing.lobbyStatus !== "active") {
+             console.log(`🔄 تحديث حالة اللاعب الموجود: ${author.displayName}`);
              await storage.updateUserStatus(existing.id, "active");
              io.emit("new_player", { ...existing, lobbyStatus: "active" });
-             console.log(`✅ لاعب عاد للمشاركة: ${author.displayName}`);
+             console.log(`✅ تم تحديث اللاعب: ${author.displayName}`);
+           } else {
+             console.log(`⚠️ اللاعب ${author.displayName} نشط بالفعل`);
            }
 
            // 🚀 فحص Auto-Start بعد كل انضمام
@@ -218,11 +230,19 @@ export async function registerRoutes(
   app.post("/api/sync", async (req, res) => {
     try {
       const { url } = req.body;
+      console.log(`🔗 بدء ربط البث: ${url}`);
+      
       const videoIdMatch = url.match(/(?:v=|\/live\/|\/embed\/|youtu\.be\/)([^?&]+)/);
-      if (!videoIdMatch) return res.status(400).json({ message: "رابط غير صالح" });
+      if (!videoIdMatch) {
+        console.log(`❌ رابط غير صالح: ${url}`);
+        return res.status(400).json({ message: "رابط غير صالح" });
+      }
 
       const videoId = videoIdMatch[1];
+      console.log(`📹 تم استخراج Video ID: ${videoId}`);
+      
       activeLiveChatId = await getLiveChatId(videoId);
+      console.log(`🆔 Live Chat ID: ${activeLiveChatId}`);
 
       if (pollingInterval) clearInterval(pollingInterval);
 
