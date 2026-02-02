@@ -364,23 +364,23 @@ export class YouTubeGunDuelGame {
     console.log(`⏱️ العد التنازلي: ${count}`);
 
     this.currentGame.countdownTimer = setInterval(() => {
-      count--;
-      this.io.emit('countdown_tick', { seconds: count });
-      console.log(`⏱️ العد التنازلي: ${count}`);
-
-      if (count <= 0) {
-        if (this.currentGame.countdownTimer) clearInterval(this.currentGame.countdownTimer);
-
+      if (count <= 1) {
         // مرحلة الاستعداد
         this.io.emit('game_ready');
         console.log(`🎯 مرحلة الاستعداد - اللاعبون مستعدون!`);
 
-        // انتظار ثانيتين لمرحلة الاستعداد ثم توليد الرقم
+        if (this.currentGame.countdownTimer) clearInterval(this.currentGame.countdownTimer);
+
+        // انتظار ثانية واحدة لمرحلة الاستعداد ثم توليد الرقم
         setTimeout(() => {
           this.generateTarget();
-        }, 2000);
+        }, 1000);
 
         return;
+      } else {
+        count--;
+        this.io.emit('countdown_tick', { seconds: count });
+        console.log(`⏱️ العد التنازلي: ${count}`);
       }
     }, 1000);
   }
