@@ -174,7 +174,7 @@ export default function YouTubeGunDuelOverlay() {
     winner: null,
     leftPlayer: null,
     rightPlayer: null,
-    countdown: 10,
+    countdown: 5,
   });
 
   const [waitingPlayers, setWaitingPlayers] = useState<WaitingPlayer[]>([]);
@@ -223,7 +223,7 @@ export default function YouTubeGunDuelOverlay() {
         winner: null,
         leftPlayer,
         rightPlayer,
-        countdown: 10
+        countdown: 5
       });
       playSound("countdown");
     });
