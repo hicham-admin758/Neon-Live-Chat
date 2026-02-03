@@ -5,7 +5,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { YouTubeGunDuelGame } from "./youtubeGunDuel";
-// import { MultiplayerDuelGame } from "./multiplayerDuel"; // فعل هذا السطر فقط إذا كان الملف موجوداً لديك
+// import { MultiplayerDuelGame } from "./multiplayerDuel"; // فعل هذا فقط إذا كان الملف موجوداً
 
 declare module "http" {
   interface IncomingMessage {
@@ -13,6 +13,7 @@ declare module "http" {
   }
 }
 
+// دالة تسجيل السجلات (Logs)
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -23,14 +24,10 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-// دالة قوية لاستخراج Video ID من أي رابط يوتيوب
+// دالة استخراج معرف الفيديو
 function extractYouTubeVideoId(input: string): string | null {
   if (!input) return null;
-  // إذا كان المدخل هو المعرف مباشرة (11 حرف)
-  if (/^[a-zA-Z0-9_-]{11}$/.test(input)) {
-    return input;
-  }
-  // استخراج من الروابط المختلفة (Live, Short, Watch)
+  if (/^[a-zA-Z0-9_-]{11}$/.test(input)) return input;
   const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
   const match = input.match(regex);
   return match ? match[1] : null;
@@ -41,10 +38,11 @@ function extractYouTubeVideoId(input: string): string | null {
     const app = express();
     const httpServer = createServer(app);
 
-    // ✅ 1. إعدادات قراءة البيانات (مهم جداً لعمل الـ API)
+    // 1. إعدادات قراءة البيانات
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
 
+    // 2. إعداد Socket.io
     const io = new Server(httpServer, {
       cors: {
         origin: "*",
@@ -52,18 +50,15 @@ function extractYouTubeVideoId(input: string): string | null {
       },
     });
 
-    // ✅ 2. جلب مفتاح اليوتيوب من البيئة
+    // 3. جلب المفتاح وتهيئة اللعبة
     const apiKey = process.env.YOUTUBE_API_KEY || "";
     if (!apiKey) {
-      console.warn("⚠️ تنبيه: لم يتم العثور على YOUTUBE_API_KEY في ملف .env");
+      console.warn("⚠️ تحذير: YOUTUBE_API_KEY غير موجود في ملف .env");
     }
 
-    // ✅ 3. تهيئة اللعبة مع تمرير المفتاح بشكل صحيح
     const youtubeGame = new YouTubeGunDuelGame(io, apiKey);
     
-    // const multiplayerDuelGame = new MultiplayerDuelGame(io); // فعل هذا إذا كان الملف جاهزاً
-
-    // تسجيل الأحداث (Logs)
+    // تسجيل الطلبات في الكونسول
     app.use((req, res, next) => {
       const start = Date.now();
       const path = req.path;
@@ -88,57 +83,41 @@ function extractYouTubeVideoId(input: string): string | null {
       next();
     });
 
-    // تسجيل المسارات
-    // ملاحظة: تأكد أن دالة registerRoutes في ملف routes.ts تقبل هذه المعاملات
-    // إذا ظهر خطأ هنا، اجعلها: await registerRoutes(app);
-    await registerRoutes(httpServer, app); 
+    // ==========================================
+    // ✅ الإصلاح الحاسم هنا: تمرير 4 متغيرات بدلاً من 2
+    // ==========================================
+    await registerRoutes(httpServer, app, io, youtubeGame); 
 
-    // --- APIs الخاصة بلعبة يوتيوب ---
 
-    // بدء المراقبة
+    // --- مسارات التحكم اليدوي في اللعبة (Fallback APIs) ---
+
+    // 1. بدء المراقبة
     app.post("/api/youtube/start", async (req, res) => {
       try {
         const { broadcastId: rawInput } = req.body;
-
-        if (!rawInput) {
-          throw new Error("Broadcast ID or YouTube URL is required");
-        }
-
-        log(`Received input: ${rawInput}`, "YouTubeGame");
+        if (!rawInput) throw new Error("Broadcast ID required");
 
         const videoId = extractYouTubeVideoId(rawInput);
-        if (!videoId) {
-          throw new Error("رابط يوتيوب غير صحيح أو المعرف غير صالح");
-        }
+        if (!videoId) throw new Error("رابط غير صحيح");
 
         const result = await youtubeGame.startMonitoring(videoId);
-
-        log(`✅ Monitoring started: ${videoId}`, "YouTubeGame");
-        res.json({
-          success: true,
-          videoId: videoId,
-          liveChatId: result.liveChatId,
-          message: "Monitoring started successfully",
-        });
-
+        res.json({ success: true, liveChatId: result.liveChatId });
       } catch (error: any) {
-        log(`❌ Error: ${error.message}`, "YouTubeGame");
         res.status(500).json({ success: false, error: error.message });
       }
     });
 
-    // إيقاف المراقبة
+    // 2. إيقاف المراقبة
     app.post("/api/youtube/stop", async (req, res) => {
       try {
         youtubeGame.stopMonitoring();
-        log(`🛑 Monitoring stopped`, "YouTubeGame");
-        res.json({ success: true, message: "Monitoring stopped" });
+        res.json({ success: true });
       } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
       }
     });
 
-    // الإحصائيات
+    // 3. الإحصائيات
     app.get("/api/youtube/stats", async (req, res) => {
       try {
         const stats = await youtubeGame.getStats();
@@ -148,27 +127,26 @@ function extractYouTubeVideoId(input: string): string | null {
       }
     });
 
-    // إعادة الضبط
+    // 4. إعادة الضبط
     app.post("/api/youtube/reset", async (req, res) => {
       try {
         await youtubeGame.resetGame();
-        log(`🔄 Game reset`, "YouTubeGame");
-        res.json({ success: true, message: "Game reset successfully" });
+        res.json({ success: true });
       } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
       }
     });
 
-    // معالجة الأخطاء العامة
+    // معالجة الأخطاء
     app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
-      console.error("Internal Server Error:", err);
+      console.error(err);
       if (res.headersSent) return next(err);
       return res.status(status).json({ message });
     });
 
-    // تشغيل Vite في بيئة التطوير
+    // تشغيل Vite أو Static Files
     if (process.env.NODE_ENV === "production") {
       serveStatic(app);
     } else {
@@ -176,22 +154,17 @@ function extractYouTubeVideoId(input: string): string | null {
       await setupVite(httpServer, app);
     }
 
-    // بدء الاستماع على المنفذ
+    // تشغيل السيرفر
     const port = parseInt(process.env.PORT || "5000", 10);
-    httpServer.listen(
-      {
-        port,
-        host: "0.0.0.0",
-        reusePort: true,
-      },
-      () => {
-        log(`serving on port ${port}`);
-        log(`🚀 YouTube Gun Duel Engine is Ready! (Key: ${apiKey ? 'Loaded' : 'Missing'})`, "System");
-      }
-    );
+    httpServer.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
+      log(`serving on port ${port}`);
+      log(`🚀 YouTube Gun Duel Engine Ready!`, "System");
+    });
 
   } catch (error) {
     console.error("Fatal error starting server:", error);
     process.exit(1);
   }
 })();
+
+await registerRoutes(httpServer, app, io, youtubeGame
