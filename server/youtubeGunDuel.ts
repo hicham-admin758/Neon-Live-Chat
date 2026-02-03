@@ -422,6 +422,9 @@ export class YouTubeGunDuelGame {
       console.error("❌ خطأ في تحديث الإحصائيات:", error);
     }
   }
+
+  // 9. معالجة إدخال اللعبة (رقم)
+  private async handleGameInput(playerId: string, numberInput: number) {
     if (!this.currentGame.isActive || !this.currentGame.targetNumber) return;
 
     const isLeft = this.currentGame.leftPlayer?.id === playerId;
@@ -435,24 +438,25 @@ export class YouTubeGunDuelGame {
       // تحقق من أن اللعبة لا تزال نشطة (لمنع إطلاق النار مرتين)
       if (!this.currentGame.isActive) return;
 
-      // في هذه اللعبة: اللاعب الذي يكتب الرقم أولاً يطلق النار ويموت، والخصم يفوز
+      // في هذه اللعبة: اللاعب الذي يكتب الرقم أولاً يطلق النار ويفوز، والخصم يموت
       const shooter = isLeft ? this.currentGame.leftPlayer! : this.currentGame.rightPlayer!;
-      const winner = isLeft ? this.currentGame.rightPlayer! : this.currentGame.leftPlayer!;
+      const winner = shooter; // اللاعب الذي أطلق النار هو الفائز
+      const loser = isLeft ? this.currentGame.rightPlayer! : this.currentGame.leftPlayer!;
       const reactionTime = Date.now() - (this.currentGame.startTime || 0);
 
       this.currentGame.isActive = false;
 
       // تحديث الإحصائيات
-      await this.updatePlayerStats(winner.id, shooter.id, reactionTime);
+      await this.updatePlayerStats(winner.id, loser.id, reactionTime);
 
       this.io.emit('shot_fired', {
         shooter: this.getPublicPlayerData(shooter),
-        victim: this.getPublicPlayerData(shooter), // الذي أطلق النار يموت
+        victim: this.getPublicPlayerData(loser), // الخصم يموت
         winner: this.getPublicPlayerData(winner),
         responseTime: reactionTime
       });
 
-      console.log(`💥 ${shooter.username} أطلق النار ومات! ${winner.username} فاز في ${reactionTime}ms!`);
+      console.log(`💥 ${shooter.username} أطلق النار وفاز! ${loser.username} مات في ${reactionTime}ms!`);
 
       // إعادة التعيين بعد 5 ثواني
       setTimeout(() => this.resetGame(), 5000);

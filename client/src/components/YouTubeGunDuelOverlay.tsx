@@ -183,6 +183,7 @@ const WaitingLobby = ({ players }: { players: WaitingPlayer[] }) => {
     </div>
   </div>
 );
+};
 
 export default function YouTubeGunDuelOverlay() {
   const [gameState, setGameState] = useState<GameState>({
