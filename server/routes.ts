@@ -6,17 +6,13 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { YouTubeGunDuelGame } from "./youtubeGunDuel";
 
+// ✅ التوقيع الصحيح: يستقبل 4 معاملات
 export async function registerRoutes(
   httpServer: Server,
-  app: Express
+  app: Express,
+  io: SocketIOServer,                    // ✅ إضافة io
+  gunDuelGame: YouTubeGunDuelGame | null  // ✅ إضافة gunDuelGame
 ): Promise<Server> {
-  const io = new SocketIOServer(httpServer, {
-    path: "/socket.io",
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
-    },
-  });
 
   const YT_API_KEY = process.env.YOUTUBE_API_KEY;
   let activeLiveChatId: string | null = null;
@@ -28,14 +24,8 @@ export async function registerRoutes(
   let reconnectAttempts = 0;
   let isPolling = false;
 
-  // 🎮 إنشاء نسخة من لعبة المسدسات
-  let gunDuelGame: YouTubeGunDuelGame | null = null;
-  if (YT_API_KEY) {
-    gunDuelGame = new YouTubeGunDuelGame(io, YT_API_KEY);
-    console.log("✅ تم تهيئة لعبة المسدسات");
-  } else {
-    console.warn("⚠️ لم يتم العثور على YOUTUBE_API_KEY - لعبة المسدسات معطلة");
-  }
+  // ✅ لا نحتاج إنشاء نسخة جديدة - نستخدم المُمَرَّرة من index.ts
+  console.log("✅ استخدام نسخة لعبة المسدسات من index.ts");
 
   // 🚀 دالة Auto-Start للعبة المسدسات
   async function checkAndStartGunDuel() {
@@ -55,6 +45,8 @@ export async function registerRoutes(
       // جلب اللاعبين النشطين
       const users = await storage.getUsers();
       const activePlayers = users.filter(u => u.lobbyStatus === "active");
+
+      console.log(`📊 فحص Auto-Start: ${activePlayers.length} لاعبين نشطين`);
 
       // ✅ شرط 3: التحقق من وجود لاعبين على الأقل
       if (activePlayers.length >= 2) {
@@ -145,6 +137,8 @@ export async function registerRoutes(
              await storage.updateUserStatus(existing.id, "active");
              io.emit("new_player", { ...existing, lobbyStatus: "active" });
              console.log(`✅ لاعب عاد للمشاركة: ${author.displayName}`);
+           } else {
+             console.log(`ℹ️ ${author.displayName} بالفعل في القائمة النشطة`);
            }
 
            // 🚀 فحص Auto-Start بعد كل انضمام
@@ -261,9 +255,18 @@ export async function registerRoutes(
   });
 
   app.get(api.users.list.path, async (req, res) => {
-    const users = await storage.getUsers();
-    // ترتيب اللاعبين حسب الـ ID لضمان الثبات
-    res.json(users.sort((a, b) => a.id - b.id));
+    try {
+      const users = await storage.getUsers();
+      console.log(`📋 جلب قائمة اللاعبين: ${users.length} لاعب`);
+      
+      // ترتيب اللاعبين حسب الـ ID لضمان الثبات
+      const sortedUsers = users.sort((a, b) => a.id - b.id);
+      
+      res.json(sortedUsers);
+    } catch (error) {
+      console.error("❌ خطأ في جلب قائمة اللاعبين:", error);
+      res.status(500).json({ message: "خطأ في السيرفر" });
+    }
   });
 
   let bombTimer: NodeJS.Timeout | null = null;
@@ -451,3 +454,4 @@ export async function registerRoutes(
 
   return httpServer;
 }
+
