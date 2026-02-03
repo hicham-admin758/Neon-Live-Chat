@@ -6,40 +6,75 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { YouTubeGunDuelGame } from "./youtubeGunDuel";
 
-// تعريف نوع البيانات للاعب لتجنب الأخطاء
-interface UserData {
-  username: string;
-  avatarUrl?: string;
-  externalId: string;
-  lobbyStatus: "active" | "eliminated" | "idle" | "in_game";
-}
-
 export async function registerRoutes(
   httpServer: Server,
-  app: Express,
-  io: SocketIOServer,
-  gunDuelGame: YouTubeGunDuelGame
+  app: Express
 ): Promise<Server> {
-  const YT_API_KEY = process.env.YOUTUBE_API_KEY;
+  const io = new SocketIOServer(httpServer, {
+    path: "/socket.io",
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
+    },
+  });
 
-  // متغيرات الحالة (State Variables)
+  const YT_API_KEY = process.env.YOUTUBE_API_KEY;
   let activeLiveChatId: string | null = null;
-  let pollingTimeout: NodeJS.Timeout | null = null; // استخدام Timeout بدل Interval للتحكم أفضل
+  let pollingInterval: NodeJS.Timeout | null = null;
+  let lastMessageTime: string | null = null;
   let currentBombHolderId: number | null = null;
   let nextPageToken: string | null = null;
   let messageCache = new Set<string>();
+  let reconnectAttempts = 0;
   let isPolling = false;
-  
-  // متغيرات لعبة القنبلة
-  let bombTimer: NodeJS.Timeout | null = null;
-  let bombRemainingSeconds = 30;
 
-  // ==================== Helper Functions ====================
+  // 🎮 إنشاء نسخة من لعبة المسدسات
+  let gunDuelGame: YouTubeGunDuelGame | null = null;
+  if (YT_API_KEY) {
+    gunDuelGame = new YouTubeGunDuelGame(io, YT_API_KEY);
+    console.log("✅ تم تهيئة لعبة المسدسات");
+  } else {
+    console.warn("⚠️ لم يتم العثور على YOUTUBE_API_KEY - لعبة المسدسات معطلة");
+  }
 
-  // دالة مساعدة لاستخراج ID الفيديو من أي رابط يوتيوب
-  function extractVideoId(url: string): string | null {
-    const match = url.match(/(?:v=|\/live\/|\/embed\/|youtu\.be\/)([^?&]+)/);
-    return match ? match[1] : null;
+  // 🚀 دالة Auto-Start للعبة المسدسات
+  async function checkAndStartGunDuel() {
+    try {
+      // ✅ شرط 1: التحقق من عدم جريان لعبة القنبلة
+      if (currentBombHolderId !== null) {
+        console.log("⚠️ لعبة القنبلة جارية - تم تجاهل Auto-Start للمسدسات");
+        return;
+      }
+
+      // ✅ شرط 2: التحقق من وجود لعبة المسدسات
+      if (!gunDuelGame) {
+        console.log("⚠️ لعبة المسدسات غير متاحة");
+        return;
+      }
+
+      // جلب اللاعبين النشطين
+      const users = await storage.getUsers();
+      const activePlayers = users.filter(u => u.lobbyStatus === "active");
+
+      // ✅ شرط 3: التحقق من وجود لاعبين على الأقل
+      if (activePlayers.length >= 2) {
+        console.log(`🎮 Auto-Start: وجد ${activePlayers.length} لاعبين نشطين - بدء لعبة المسدسات تلقائياً...`);
+        
+        // تأخير بسيط (ثانيتين) لإعطاء فرصة للمزيد من اللاعبين للانضمام
+        setTimeout(async () => {
+          // ✅ تحقق مزدوج قبل البدء
+          if (currentBombHolderId === null && gunDuelGame) {
+            try {
+              await gunDuelGame.startGameFromActivePlayers();
+            } catch (error) {
+              console.error("❌ خطأ في Auto-Start للمسدسات:", error);
+            }
+          }
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("❌ خطأ في checkAndStartGunDuel:", error);
+    }
   }
 
   // دالة لجلب ID الشات
@@ -47,7 +82,6 @@ export async function registerRoutes(
     try {
       const url = `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}&key=${YT_API_KEY}`;
       const res = await fetch(url);
-      if (!res.ok) throw new Error(`YouTube API Error: ${res.status}`);
       const data = await res.json();
       return data.items?.[0]?.liveStreamingDetails?.activeLiveChatId || null;
     } catch (e) {
@@ -56,20 +90,10 @@ export async function registerRoutes(
     }
   }
 
-  // ==================== Chat Polling Logic ====================
-
+  // الدالة الرئيسية لاستطلاع الشات (The Brain)
   async function pollChat() {
-    // 1. شروط التوقف
-    if (!activeLiveChatId || !YT_API_KEY) return;
-    
-    // إذا كانت لعبة المسدسات نشطة، نوقف استطلاع القنبلة لتوفير الموارد والكوتا
-    if (gunDuelGame && gunDuelGame.isActive()) {
-      // نعيد المحاولة بعد 10 ثواني بدلاً من الاستمرار في الاستطلاع السريع
-      pollingTimeout = setTimeout(pollChat, 10000);
-      return;
-    }
+    if (!activeLiveChatId || !YT_API_KEY || isPolling) return;
 
-    if (isPolling) return; // منع التداخل
     isPolling = true;
 
     try {
@@ -78,12 +102,10 @@ export async function registerRoutes(
 
       const res = await fetch(url);
 
+      // التعامل مع الأخطاء
       if (!res.ok) {
         if (res.status === 403) console.log("⚠️ Quota limit or permission error");
-        if (res.status === 404) console.log("⚠️ Chat not found (Stream might be over)");
         isPolling = false;
-        // إعادة المحاولة ببطء عند الخطأ
-        pollingTimeout = setTimeout(pollChat, 10000); 
         return;
       }
 
@@ -97,19 +119,19 @@ export async function registerRoutes(
         const messageId = msg.id;
         const author = msg.authorDetails;
 
+        // تجاهل الرسائل القديمة والمكررة
         if (messageCache.has(messageId)) continue;
         messageCache.add(messageId);
+
+        // تنظيف الكاش إذا كبر جداً
         if (messageCache.size > 2000) messageCache.clear();
 
         console.log(`💬 ${author.displayName}: ${text}`);
 
-        // --- منطق الانضمام ---
-        const cleanText = text.trim().toLowerCase();
-        const isJoinCommand = cleanText === "!دخول" || cleanText === "دخول" || cleanText === "!join";
-        
+        // 1️⃣ منطق الانضمام (Join Logic)
+        const isJoinCommand = text.includes("!دخول") || /!?(دخول|join|انضمام)/i.test(text);
         if (isJoinCommand) {
            const existing = await storage.getUserByUsername(author.displayName);
-           
            if (!existing) {
              const user = await storage.createUser({
                username: author.displayName,
@@ -118,35 +140,34 @@ export async function registerRoutes(
                lobbyStatus: "active"
              });
              io.emit("new_player", user);
-             console.log(`➕ لاعب جديد: ${author.displayName}`);
+             console.log(`✅ لاعب جديد انضم: ${author.displayName}`);
            } else if (existing.lobbyStatus !== "active") {
              await storage.updateUserStatus(existing.id, "active");
              io.emit("new_player", { ...existing, lobbyStatus: "active" });
-             console.log(`🔄 عودة لاعب: ${author.displayName}`);
+             console.log(`✅ لاعب عاد للمشاركة: ${author.displayName}`);
            }
+
+           // 🚀 فحص Auto-Start بعد كل انضمام
+           await checkAndStartGunDuel();
         }
 
-        // --- منطق القنبلة ---
+        // 2️⃣ منطق القنبلة الذكي (Smart Bomb Logic)
         if (currentBombHolderId) {
           const sender = await storage.getUserByUsername(author.displayName);
 
           if (sender && sender.id === currentBombHolderId) {
-            const numberMatch = text.match(/\d+/); // البحث عن رقم في الرسالة
+            // استخراج الأرقام من الرسالة (مثلاً: "مرر لـ 17" -> يستخرج 17)
+            const numberMatch = text.match(/\d+/);
 
             if (numberMatch) {
               const targetId = parseInt(numberMatch[0]);
               const allUsers = await storage.getUsers();
-              // التأكد أن الهدف موجود ونشط وليس نفس الشخص
-              const targetUser = allUsers.find(u => u.id === targetId && u.lobbyStatus === "active");
+              const targetUser = allUsers.find(u => u.id === targetId);
 
-              if (targetUser && targetUser.id !== currentBombHolderId) {
-                // تمرير القنبلة
+              if (targetUser && targetUser.lobbyStatus === "active" && targetUser.id !== currentBombHolderId) {
                 currentBombHolderId = targetUser.id;
                 io.emit("bomb_started", { playerId: targetUser.id });
-                console.log(`💣 تم تمرير القنبلة من ${sender.username} إلى ${targetUser.username}`);
-                
-                // إعادة ضبط المؤقت للشخص الجديد
-                startBombTimer(); 
+                console.log(`✅ تم تمرير القنبلة إلى ${targetUser.username}`);
               }
             }
           }
@@ -156,88 +177,20 @@ export async function registerRoutes(
       console.error("Poll Error:", error);
     } finally {
       isPolling = false;
-      // استطلاع كل 3 ثواني
-      pollingTimeout = setTimeout(pollChat, 3000);
     }
   }
 
-  // ==================== Bomb Game Logic ====================
-
-  function startBombTimer() {
-    // 1. تنظيف المؤقت السابق لمنع التداخل
-    if (bombTimer) {
-      clearInterval(bombTimer);
-      bombTimer = null;
-    }
-
-    bombRemainingSeconds = 30;
-    // إعلام الجميع ببدء العد للشخص الحالي
-    io.emit("bomb_started", { playerId: currentBombHolderId, seconds: bombRemainingSeconds });
-
-    bombTimer = setInterval(async () => {
-      bombRemainingSeconds--;
-      io.emit("bomb_tick", { seconds: bombRemainingSeconds });
-
-      if (bombRemainingSeconds <= 0) {
-        if (bombTimer) {
-          clearInterval(bombTimer);
-          bombTimer = null;
-        }
-
-        if (currentBombHolderId) {
-          const victimId = currentBombHolderId;
-          console.log(`💥 انفجرت القنبلة في اللاعب ID: ${victimId}`);
-          
-          await storage.updateUserStatus(victimId, "eliminated");
-          io.emit("player_eliminated", { playerId: victimId });
-
-          // التحقق من حالة اللعبة بعد الإقصاء
-          checkGameState();
-        }
-      }
-    }, 1000);
-  }
-
-  async function checkGameState() {
-    const updatedUsers = await storage.getUsers();
-    const active = updatedUsers.filter(u => u.lobbyStatus === "active");
-
-    if (active.length === 1) {
-      // فائز واحد
-      const winner = active[0];
-      currentBombHolderId = null;
-      if (bombTimer) clearInterval(bombTimer);
-      
-      io.emit("game_winner", winner);
-      console.log(`🏆 الفائز: ${winner.username}`);
-
-      setTimeout(async () => {
-        await storage.resetAllUsersStatus();
-        io.emit("game_reset");
-      }, 5000);
-
-    } else if (active.length > 1) {
-      // اللعبة مستمرة - اختيار ضحية جديدة عشوائية
-      const nextPlayer = active[Math.floor(Math.random() * active.length)];
-      currentBombHolderId = nextPlayer.id;
-      startBombTimer();
-    } else {
-      // الجميع خسر (حالة نادرة)
-      currentBombHolderId = null;
-      io.emit("game_reset");
-    }
-  }
-
-  // ==================== General API Routes ====================
+  // ==================== API Routes ====================
 
   app.get("/api/stream-meta", async (req, res) => {
     try {
       const { url } = req.query;
       if (typeof url !== "string") return res.status(400).json({ message: "Invalid URL" });
 
-      const videoId = extractVideoId(url);
-      if (!videoId) return res.status(400).json({ message: "Invalid YouTube URL" });
+      const videoIdMatch = url.match(/(?:v=|\/live\/|\/embed\/|youtu\.be\/)([^?&]+)/);
+      if (!videoIdMatch) return res.status(400).json({ message: "Invalid YouTube URL" });
 
+      const videoId = videoIdMatch[1];
       const apiUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YT_API_KEY}`;
       const ytRes = await fetch(apiUrl);
       const data = await ytRes.json();
@@ -262,23 +215,20 @@ export async function registerRoutes(
   app.post("/api/sync", async (req, res) => {
     try {
       const { url } = req.body;
-      const videoId = extractVideoId(url);
-      
-      if (!videoId) {
-        return res.status(400).json({ message: "رابط غير صالح" });
-      }
+      const videoIdMatch = url.match(/(?:v=|\/live\/|\/embed\/|youtu\.be\/)([^?&]+)/);
+      if (!videoIdMatch) return res.status(400).json({ message: "رابط غير صالح" });
 
-      console.log(`📹 إعداد البث للفيديو: ${videoId}`);
-      
-      // تنظيف الحالة السابقة
-      if (pollingTimeout) clearTimeout(pollingTimeout);
+      const videoId = videoIdMatch[1];
       activeLiveChatId = await getLiveChatId(videoId);
-      
+
+      if (pollingInterval) clearInterval(pollingInterval);
+
+      // إعادة تعيين اللعبة عند المزامنة الجديدة
       nextPageToken = null;
       messageCache.clear();
 
       if (activeLiveChatId) {
-        // جلب تفاصيل الفيديو للعرض
+        // جلب البيانات الأساسية للفيديو
         const metaUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YT_API_KEY}`;
         const metaRes = await fetch(metaUrl);
         const metaData = await metaRes.json();
@@ -286,21 +236,23 @@ export async function registerRoutes(
         const thumbnail = snippet?.thumbnails?.high?.url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
         const title = snippet?.title || "Live Stream";
 
-        // إعداد لعبة المسدسات أيضاً
+        // 🎮 تشغيل مراقبة لعبة المسدسات
         if (gunDuelGame) {
           try {
             await gunDuelGame.startMonitoring(videoId);
+            console.log("✅ تم تشغيل مراقبة لعبة المسدسات");
           } catch (error) {
-            console.error("⚠️ فشل بدء مراقبة المسدسات (قد يكون طبيعياً):", error);
+            console.error("⚠️ خطأ في تشغيل مراقبة المسدسات:", error);
+            // لا نوقف العملية - نستمر في المزامنة
           }
         }
 
-        // بدء حلقة الاستطلاع
-        pollChat();
-        
+        // ⚡ تسريع الاستطلاع إلى 3 ثواني بدلاً من 10
+        pollingInterval = setInterval(pollChat, 3000);
         res.json({ success: true, title, thumbnail });
+        console.log("✅ Started polling for chat:", activeLiveChatId);
       } else {
-        res.status(400).json({ message: "لا يمكن العثور على شات مباشر لهذا الفيديو" });
+        res.status(400).json({ message: "لا يوجد شات مباشر" });
       }
     } catch (e) {
       console.error("❌ خطأ في /api/sync:", e);
@@ -309,206 +261,193 @@ export async function registerRoutes(
   });
 
   app.get(api.users.list.path, async (req, res) => {
-    try {
-      const users = await storage.getUsers();
-      res.json(users.sort((a, b) => a.id - b.id));
-    } catch (error) {
-      res.status(500).json([]);
-    }
+    const users = await storage.getUsers();
+    // ترتيب اللاعبين حسب الـ ID لضمان الثبات
+    res.json(users.sort((a, b) => a.id - b.id));
   });
 
-  app.get("/api/system/status", (req, res) => {
-    res.json({ 
-      isPolling: isPolling, 
-      activeLiveChatId, 
-      bombActive: currentBombHolderId !== null,
-      gunDuelActive: gunDuelGame ? gunDuelGame.isActive() : false
-    });
-  });
+  let bombTimer: NodeJS.Timeout | null = null;
+  let bombRemainingSeconds = 30;
 
-  // ==================== Bomb Game Control Routes ====================
+  function startBombTimer() {
+    if (bombTimer) clearInterval(bombTimer);
+    bombRemainingSeconds = 30;
+    io.emit("bomb_started", { playerId: currentBombHolderId, seconds: bombRemainingSeconds });
+
+    bombTimer = setInterval(async () => {
+      bombRemainingSeconds--;
+      io.emit("bomb_tick", { seconds: bombRemainingSeconds });
+
+      if (bombRemainingSeconds <= 0) {
+        if (bombTimer) {
+          clearInterval(bombTimer);
+          bombTimer = null;
+        }
+
+        if (currentBombHolderId) {
+          const victimId = currentBombHolderId;
+          await storage.updateUserStatus(victimId, "eliminated");
+          io.emit("player_eliminated", { playerId: victimId });
+
+          const updatedUsers = await storage.getUsers();
+          const active = updatedUsers.filter(u => u.lobbyStatus === "active");
+
+          if (active.length === 1) {
+            const winner = active[0];
+            currentBombHolderId = null;
+            if (bombTimer) {
+              clearInterval(bombTimer);
+              bombTimer = null;
+            }
+            io.emit("game_winner", winner);
+
+            setTimeout(async () => {
+              await storage.resetAllUsersStatus();
+              io.emit("game_reset");
+            }, 5000);
+          } else if (active.length > 1) {
+            const nextPlayer = active[Math.floor(Math.random() * active.length)];
+            currentBombHolderId = nextPlayer.id;
+            // Recursively start timer for the next player
+            startBombTimer();
+          }
+        }
+      }
+    }, 1000);
+  }
 
   app.post("/api/game/start-bomb", async (req, res) => {
     const users = await storage.getUsers();
     const activePlayers = users.filter(u => u.lobbyStatus === "active");
 
-    if (activePlayers.length < 2) return res.status(400).json({ message: "عدد اللاعبين غير كاف (يحتاج 2+)" });
+    if (activePlayers.length < 2) return res.status(400).json({ message: "عدد اللاعبين غير كاف" });
 
     const randomPlayer = activePlayers[Math.floor(Math.random() * activePlayers.length)];
     currentBombHolderId = randomPlayer.id;
 
     startBombTimer();
-    res.json({ success: true, startPlayer: randomPlayer.username });
+    res.json({ success: true });
+  });
+
+  app.post("/api/game/eliminate", async (req, res) => {
+    const { playerId } = req.body;
+    await storage.updateUserStatus(playerId, "eliminated");
+    io.emit("player_eliminated", { playerId });
+
+    const users = await storage.getUsers();
+    const active = users.filter(u => u.lobbyStatus === "active");
+
+    // 🏆 منطق الفوز
+    if (active.length === 1) {
+      const winner = active[0];
+      currentBombHolderId = null;
+      io.emit("game_winner", winner);
+      console.log(`🏆 الفائز هو: ${winner.username}`);
+
+      // إعادة التشغيل التلقائي بعد 5 ثوانٍ
+      setTimeout(async () => {
+        await storage.resetAllUsersStatus();
+        io.emit("game_reset");
+        console.log("🔄 تم إعادة تشغيل اللعبة تلقائياً");
+      }, 5000);
+    } 
+    // استمرار اللعبة
+    else if (active.length > 1) {
+      // نقل القنبلة لشخص عشوائي آخر إذا كان حامل القنبلة هو من خسر
+      if (playerId === currentBombHolderId) {
+         const nextPlayer = active[Math.floor(Math.random() * active.length)];
+         currentBombHolderId = nextPlayer.id;
+         io.emit("bomb_started", { playerId: nextPlayer.id });
+      }
+    } else {
+        // الكل خسر
+        currentBombHolderId = null;
+        io.emit("game_reset");
+    }
+
+    res.json({ success: true });
   });
 
   app.post("/api/game/reset", async (req, res) => {
-    if (bombTimer) clearInterval(bombTimer);
-    bombTimer = null;
-    currentBombHolderId = null;
     await storage.resetAllUsersStatus();
+    currentBombHolderId = null;
     io.emit("game_reset");
     res.json({ success: true });
   });
 
-  // ==================== Gun Duel Game Routes ====================
+  app.post("/api/game/clear-participants", async (req, res) => {
+    await storage.deleteAllUsers();
+    currentBombHolderId = null;
+    io.emit("game_reset");
+    res.json({ success: true });
+  });
+
+  app.get("/api/system/status", (req, res) => {
+      res.json({ isPolling: !!pollingInterval, activeLiveChatId });
+  });
+
+  // 🎮 ==================== Gun Duel Game APIs ====================
 
   app.get("/api/gun-duel/stats", async (req, res) => {
-    if (!gunDuelGame) return res.status(503).json({ message: "خدمة المسدسات غير متوفرة" });
+    if (!gunDuelGame) {
+      return res.status(503).json({ message: "لعبة المسدسات غير متاحة" });
+    }
+    
     try {
       const stats = await gunDuelGame.getStats();
       res.json(stats);
     } catch (error) {
-      res.status(500).json({ message: "خطأ داخلي" });
+      console.error("❌ خطأ في /api/gun-duel/stats:", error);
+      res.status(500).json({ message: "خطأ في جلب الإحصائيات" });
     }
   });
 
   app.post("/api/gun-duel/start", async (req, res) => {
-    if (!gunDuelGame) return res.status(503).json({ message: "خدمة المسدسات غير متوفرة" });
-    if (currentBombHolderId !== null) return res.status(400).json({ message: "لا يمكن البدء: لعبة القنبلة جارية" });
+    if (!gunDuelGame) {
+      return res.status(503).json({ message: "لعبة المسدسات غير متاحة" });
+    }
+
+    // ✅ التحقق: لا تبدأ إذا كانت لعبة القنبلة جارية
+    if (currentBombHolderId !== null) {
+      return res.status(400).json({ message: "لعبة القنبلة جارية حالياً" });
+    }
 
     try {
       await gunDuelGame.startGameFromActivePlayers();
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ message: "فشل بدء اللعبة" });
+      console.error("❌ خطأ في /api/gun-duel/start:", error);
+      res.status(500).json({ message: "خطأ في بدء اللعبة" });
     }
   });
 
   app.post("/api/gun-duel/reset", async (req, res) => {
-    if (!gunDuelGame) return res.status(503).json({ message: "خدمة المسدسات غير متوفرة" });
+    if (!gunDuelGame) {
+      return res.status(503).json({ message: "لعبة المسدسات غير متاحة" });
+    }
+
     try {
       await gunDuelGame.resetGame();
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ message: "فشل إعادة التعيين" });
+      console.error("❌ خطأ في /api/gun-duel/reset:", error);
+      res.status(500).json({ message: "خطأ في إعادة تعيين اللعبة" });
     }
   });
 
   app.post("/api/gun-duel/stop-monitoring", (req, res) => {
-    if (!gunDuelGame) return res.status(503).json({ message: "خدمة المسدسات غير متوفرة" });
-    gunDuelGame.stopMonitoring();
-    res.json({ success: true });
-  });
-
-  // ==================== Test & Debug Routes ====================
-
-  app.post("/api/game/add-test-player", async (req, res) => {
-    try {
-      const { username } = req.body;
-      const playerName = username || `TestUser_${Date.now()}`;
-      
-      const testPlayer = {
-        username: playerName,
-        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${playerName}`,
-        externalId: `test_${Date.now()}_${Math.random()}`,
-        lobbyStatus: "active" as const
-      };
-
-      // استخدام createUser لضمان الاتساق
-      const user = await storage.createUser(testPlayer);
-      io.emit("new_player", user);
-
-      // فحص التشغيل التلقائي للمسدسات إذا كان مفعل
-      if (gunDuelGame && !gunDuelGame.isActive()) {
-         // يمكن وضع منطق التشغيل التلقائي هنا إذا رغبت
-      }
-
-      res.json({ success: true, user });
-    } catch (error) {
-      console.error("Test User Error:", error);
-      res.status(500).json({ message: "فشل إضافة لاعب تجريبي" });
+    if (!gunDuelGame) {
+      return res.status(503).json({ message: "لعبة المسدسات غير متاحة" });
     }
-  });
 
-  app.post("/api/game/add-test-players", async (req, res) => {
     try {
-      for (let i = 1; i <= 3; i++) {
-        const id = Date.now() + i;
-        await storage.createUser({
-          username: `لاعب تجريبي ${i}`,
-          avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=bot${id}`,
-          externalId: `bot_${id}`,
-          lobbyStatus: "active"
-        });
-      }
-      // تحديث القائمة للجميع
-      const allUsers = await storage.getUsers();
-      // هنا نفترض أن الواجهة تقوم بعمل Polling أو نستطيع إرسال event
-      io.emit("players_waiting", { count: allUsers.length, players: allUsers }); // تحديث عام
-      
-      res.json({ success: true });
-    } catch (e) {
-      res.status(500).json({ message: "Error adding bots" });
-    }
-  });
-
-  app.post("/api/game/send-test-message", async (req, res) => {
-    try {
-      const { message, playerId } = req.body;
-      const player = playerId || "test_player_1";
-
-      console.log(`🧪 رسالة تجريبية [${player}]: ${message}`);
-
-      // إرسال لـ GunDuel
-      if (gunDuelGame) {
-        await gunDuelGame.processTestMessage(player, message);
-      }
-      
-      // ملاحظة: لمحاكاة القنبلة هنا، ستحتاج لمنطق إضافي لأن دالة pollChat تعتمد على fetch
-      // لكن بالنسبة لـ GunDuel فالأمر يعمل عبر دالة processTestMessage المخصصة
-
+      gunDuelGame.stopMonitoring();
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ message: "فشل إرسال الرسالة" });
-    }
-  });
-
-  app.post("/api/game/clear-dummy-players", async (req, res) => {
-    try {
-      // إذا كانت الدالة غير موجودة في storage.ts، يجب إضافتها أو استخدام Loop
-      if (typeof storage.deleteDummyPlayers === 'function') {
-        await storage.deleteDummyPlayers();
-      } else {
-        // Fallback: حذف يدوي (غير فعال لكن يعمل كبديل)
-        const users = await storage.getUsers();
-        for (const user of users) {
-          if (user.externalId.startsWith('test_') || user.externalId.startsWith('bot_')) {
-            // ملاحظة: نحتاج لدالة deleteUser في storage
-             // await storage.deleteUser(user.id); 
-             console.log(`⚠️ يجب حذف ${user.username} يدوياً لعدم توفر دالة deleteUser`);
-          }
-        }
-      }
-      
-      io.emit("game_reset");
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ message: "خطأ في التنظيف" });
-    }
-  });
-  
-  // إحصائيات عامة
-  app.get("/api/game/stats", async (req, res) => {
-    try {
-      const allUsers = await storage.getUsers();
-      const stats = allUsers
-        .filter(u => u.totalGames > 0)
-        .map(u => ({
-          username: u.username,
-          wins: u.wins,
-          losses: u.losses,
-          totalGames: u.totalGames,
-          winRate: u.totalGames > 0 ? ((u.wins / u.totalGames) * 100).toFixed(1) : 0,
-          avgReactionTime: u.avgReactionTime ? u.avgReactionTime.toFixed(0) : 0
-        }))
-        .sort((a, b) => b.totalGames - a.totalGames);
-
-      res.json({ stats });
-    } catch (error) {
-      res.status(500).json({ message: "خطأ في الإحصائيات" });
+      console.error("❌ خطأ في /api/gun-duel/stop-monitoring:", error);
+      res.status(500).json({ message: "خطأ في إيقاف المراقبة" });
     }
   });
 
   return httpServer;
 }
- 
