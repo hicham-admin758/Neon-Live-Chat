@@ -25,3 +25,23 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+
+## Project: خلية البطولات (Tournament Cell)
+
+An Arabic tournament management and bracket display platform.
+
+### Features
+- **Public Interface**: Homepage shows active bracket, news ticker. Archive page shows completed tournaments. News page.
+- **Admin Panel** (`/admin`): Protected with password `112233`. Full tournament management.
+- **Real-time updates**: Polling every 3 seconds for live score updates.
+- **Bracket System**: Auto-generates single elimination brackets from participants.
+
+### DB Schema (lib/db/src/schema/)
+- `tournamentsTable` — tournaments with name, type, status, winner
+- `participantsTable` — participants per tournament
+- `matchesTable` — matches with round, scores, winner
+- `newsTable` — news articles
+
+### API Routes (artifacts/api-server/src/routes/)
+- `tournaments.ts` — full CRUD + generate-bracket + archive endpoints
+- `news.ts` — full CRUD for news articles

@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: API specification for خلية البطولات - Tournament Platform
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: tournaments
+    description: Tournament operations
+  - name: news
+    description: News operations
 paths:
   /healthz:
     get:
@@ -24,6 +28,286 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /tournaments:
+    get:
+      operationId: listTournaments
+      tags: [tournaments]
+      summary: List all tournaments
+      responses:
+        "200":
+          description: List of tournaments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tournament"
+    post:
+      operationId: createTournament
+      tags: [tournaments]
+      summary: Create a new tournament
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTournamentBody"
+      responses:
+        "201":
+          description: Tournament created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+
+  /tournaments/{id}:
+    get:
+      operationId: getTournament
+      tags: [tournaments]
+      summary: Get a tournament by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tournament details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateTournament
+      tags: [tournaments]
+      summary: Update a tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTournamentBody"
+      responses:
+        "200":
+          description: Tournament updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+    delete:
+      operationId: deleteTournament
+      tags: [tournaments]
+      summary: Delete a tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /tournaments/{id}/matches:
+    get:
+      operationId: listMatches
+      tags: [tournaments]
+      summary: List all matches for a tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of matches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Match"
+
+  /tournaments/{id}/generate-bracket:
+    post:
+      operationId: generateBracket
+      tags: [tournaments]
+      summary: Generate bracket for a tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Bracket generated
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Match"
+
+  /tournaments/{id}/archive:
+    post:
+      operationId: archiveTournament
+      tags: [tournaments]
+      summary: Archive a completed tournament
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Tournament archived
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+
+  /matches/{matchId}:
+    patch:
+      operationId: updateMatch
+      tags: [tournaments]
+      summary: Update match result
+      parameters:
+        - name: matchId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMatchBody"
+      responses:
+        "200":
+          description: Match updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+
+  /participants:
+    post:
+      operationId: addParticipant
+      tags: [tournaments]
+      summary: Add participant to a tournament
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddParticipantBody"
+      responses:
+        "201":
+          description: Participant added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Participant"
+
+  /participants/{participantId}:
+    delete:
+      operationId: removeParticipant
+      tags: [tournaments]
+      summary: Remove participant from tournament
+      parameters:
+        - name: participantId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+
+  /news:
+    get:
+      operationId: listNews
+      tags: [news]
+      summary: List all news articles
+      responses:
+        "200":
+          description: List of news
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NewsArticle"
+    post:
+      operationId: createNews
+      tags: [news]
+      summary: Create a news article
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNewsBody"
+      responses:
+        "201":
+          description: News article created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsArticle"
+
+  /news/{newsId}:
+    patch:
+      operationId: updateNews
+      tags: [news]
+      summary: Update a news article
+      parameters:
+        - name: newsId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNewsBody"
+      responses:
+        "200":
+          description: News updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewsArticle"
+    delete:
+      operationId: deleteNews
+      tags: [news]
+      summary: Delete a news article
+      parameters:
+        - name: newsId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +318,214 @@ components:
       required:
         - status
 
+    Tournament:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          description: "1v1, 2v2, 3v3, etc."
+        status:
+          type: string
+          enum: [pending, active, completed, archived]
+        winnerId:
+          type: ["integer", "null"]
+        winnerName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        participants:
+          type: array
+          items:
+            $ref: "#/components/schemas/Participant"
+        matches:
+          type: array
+          items:
+            $ref: "#/components/schemas/Match"
+      required:
+        - id
+        - name
+        - type
+        - status
+        - winnerId
+        - winnerName
+        - createdAt
+        - updatedAt
+        - participants
+        - matches
+
+    CreateTournamentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+      required:
+        - name
+        - type
+
+    UpdateTournamentBody:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum: [pending, active, completed, archived]
+        winnerId:
+          type: ["integer", "null"]
+        winnerName:
+          type: ["string", "null"]
+
+    Participant:
+      type: object
+      properties:
+        id:
+          type: integer
+        tournamentId:
+          type: integer
+        name:
+          type: string
+        seed:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tournamentId
+        - name
+        - seed
+        - createdAt
+
+    AddParticipantBody:
+      type: object
+      properties:
+        tournamentId:
+          type: integer
+        name:
+          type: string
+        seed:
+          type: ["integer", "null"]
+      required:
+        - tournamentId
+        - name
+
+    Match:
+      type: object
+      properties:
+        id:
+          type: integer
+        tournamentId:
+          type: integer
+        round:
+          type: integer
+        matchNumber:
+          type: integer
+        participant1Id:
+          type: ["integer", "null"]
+        participant1Name:
+          type: ["string", "null"]
+        participant2Id:
+          type: ["integer", "null"]
+        participant2Name:
+          type: ["string", "null"]
+        winnerId:
+          type: ["integer", "null"]
+        winnerName:
+          type: ["string", "null"]
+        score1:
+          type: ["string", "null"]
+        score2:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, ongoing, completed]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tournamentId
+        - round
+        - matchNumber
+        - participant1Id
+        - participant1Name
+        - participant2Id
+        - participant2Name
+        - winnerId
+        - winnerName
+        - score1
+        - score2
+        - status
+        - createdAt
+        - updatedAt
+
+    UpdateMatchBody:
+      type: object
+      properties:
+        winnerId:
+          type: ["integer", "null"]
+        winnerName:
+          type: ["string", "null"]
+        score1:
+          type: ["string", "null"]
+        score2:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, ongoing, completed]
+
+    NewsArticle:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - content
+        - createdAt
+        - updatedAt
+
+    CreateNewsBody:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+      required:
+        - title
+        - content
+
+    UpdateNewsBody:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
